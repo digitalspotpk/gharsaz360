@@ -204,6 +204,9 @@ function renderTopbar(){
     more:'Sab modules'
   };
   $('#pageSub').textContent = subs[ROUTE] || '';
+  const pdfBtn = $('#pdfBtn');
+  const noPdfRoutes = ['dashboard','more','settings'];
+  pdfBtn.style.display = noPdfRoutes.includes(ROUTE) ? 'none' : 'flex';
 }
 function renderBottomNav(){
   const nav = $('#bottomNav');
@@ -225,7 +228,7 @@ function renderFab(){
   const fab = $('#fabAdd');
   if(map[ROUTE]){
     fab.style.display='flex';
-    fab.onclick = ()=> handleFab(ROUTE);
+    fab.onclick = ()=> handleFab(map[ROUTE]);
   } else {
     fab.style.display='none';
   }
@@ -1855,6 +1858,8 @@ function initTheme(){
 function initTopbarButtons(){
   $('#menuBtn').innerHTML = ICN.menu;
   $('#menuBtn').addEventListener('click', ()=>navigate('more'));
+  $('#pdfBtn').innerHTML = ICN.print;
+  $('#pdfBtn').addEventListener('click', exportPDF);
   $('#settingsBtn').innerHTML = ICN.settings;
   $('#settingsBtn').addEventListener('click', ()=>navigate('settings'));
   $('#themeBtn').innerHTML = document.documentElement.classList.contains('dark') ? ICN.sun : ICN.moon;
@@ -1886,4 +1891,139 @@ if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
     navigator.serviceWorker.register('sw.js').catch(err=>console.warn('SW registration failed:', err));
   });
+}
+
+/* ---------------------------------------------------------------------- *
+ * 25. PDF EXPORT (native browser print-to-PDF — no external library,
+ *     works fully offline on every device that has a print/share sheet)
+ * ---------------------------------------------------------------------- */
+function pdfRow(cells){ return `<tr>${cells.map(c=>`<td>${escapeHtml(c===undefined||c===null?'':c)}</td>`).join('')}</tr>`; }
+function pdfSection(title, headers, rows){
+  let html = `<h2>${escapeHtml(title)}</h2>`;
+  if(!rows.length){ html += `<p class="print-empty">Koi record nahi mila.</p>`; return html; }
+  html += `<table><thead><tr>${headers.map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(pdfRow).join('')}</tbody></table>`;
+  return html;
+}
+function getPrintData(route){
+  switch(route){
+    case 'budgets':
+      return { title:'Budgets & Income Report', sections: [
+        pdfSection('Budgets', ['Name','Category','Period','Estimated','Spent'],
+          DATA.budgets.map(b=>[b.name,b.category,b.period,fmtMoney(b.estimated),fmtMoney(budgetSpent(b))])),
+        pdfSection('Income', ['Source','Date','Amount','Notes'],
+          DATA.incomes.map(i=>[i.source,fmtDate(i.date),fmtMoney(i.amount),i.notes||''])),
+      ]};
+    case 'expenses':
+      return { title:'Expense Report', sections: [
+        pdfSection('All Expenses', ['Date','Category','Sub-category','Amount','Note'],
+          DATA.expenses.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''))
+            .map(e=>[fmtDate(e.date),e.category,e.subcategory,fmtMoney(e.amount),e.note||''])),
+      ]};
+    case 'rent':
+      return { title:'House Rent Report', sections: [
+        pdfSection('Properties', ['Name','Type','Address'],
+          DATA.properties.map(p=>[p.name,p.type||'',p.address||''])),
+        pdfSection('Tenants', ['Name','Property','Phone','Monthly Rent','Security Deposit'],
+          DATA.tenants.map(t=>{
+            const p = DATA.properties.find(x=>x.id===t.propertyId);
+            return [t.name, p?p.name:'', t.phone||'', fmtMoney(t.monthlyRent), fmtMoney(t.securityDeposit)];
+          })),
+        pdfSection('Rent Payments', ['Tenant','Month','Amount','Status'],
+          DATA.rentPayments.slice().reverse().map(pay=>{
+            const t = DATA.tenants.find(x=>x.id===pay.tenantId);
+            return [t?t.name:'', pay.month, fmtMoney(pay.amount), pay.status];
+          })),
+      ]};
+    case 'udhar':
+      return { title:'Udhar Khata Ledger', sections: [
+        pdfSection('Contacts & Balance', ['Name','Phone','Balance'],
+          DATA.udhars.map(u=>{
+            const bal = udharBalance(u);
+            return [u.name, u.phone||'', bal===0?'Settled':(bal>0?fmtMoney(bal)+' receivable':fmtMoney(-bal)+' payable')];
+          })),
+        pdfSection('All Transactions', ['Contact','Type','Amount','Date','Status'],
+          DATA.udharTx.slice().reverse().map(t=>{
+            const u = DATA.udhars.find(x=>x.id===t.udharId);
+            return [u?u.name:'', t.type, fmtMoney(t.amount), fmtDate(t.date), t.status];
+          })),
+      ]};
+    case 'construction':
+      return { title:'Construction Report', sections: [
+        pdfSection('Projects', ['Name','Start Date','Budget'],
+          DATA.constructionProjects.map(p=>[p.name,fmtDate(p.startDate),fmtMoney(p.budget)])),
+        pdfSection('Material Expenses', ['Item','Qty','Amount','Date','Vendor'],
+          DATA.materials.slice().reverse().map(m=>[m.item,m.qty||'',fmtMoney(m.amount),fmtDate(m.date),m.vendor||''])),
+        pdfSection('Labour Register', ['Name','Role','Daily Wage','Advance','Net Payout'],
+          DATA.labourers.map(l=>[l.name,l.role,fmtMoney(l.dailyWage),fmtMoney(l.advance),fmtMoney(labourerPayout(l))])),
+      ]};
+    case 'assets':
+      return { title:'Assets & Warranty Report', sections: [
+        pdfSection('Assets', ['Name','Vendor','Price','Purchase Date','Warranty Expiry'],
+          DATA.assets.map(a=>[a.name,a.vendor||'',fmtMoney(a.price),fmtDate(a.purchaseDate),fmtDate(a.warrantyExpiry)])),
+      ]};
+    case 'maintenance':
+      return { title:'Maintenance Schedule', sections: [
+        pdfSection('Maintenance Log', ['Task','Last Serviced','Next Due','Cost'],
+          DATA.maintenanceLogs.map(m=>[m.task,fmtDate(m.lastDate),fmtDate(m.nextDate),fmtMoney(m.cost)])),
+      ]};
+    case 'vehicle':
+      return { title:'Vehicle Log Report', sections: [
+        pdfSection('Vehicles', ['Name','Plate','Odometer'],
+          DATA.vehicles.map(v=>[v.name,v.plate||'',(v.odometer||0)+' km'])),
+        pdfSection('Fuel Log', ['Vehicle','Date','Liters','Rate','Odometer','Cost'],
+          DATA.fuelLogs.slice().reverse().map(f=>{
+            const v = DATA.vehicles.find(x=>x.id===f.vehicleId);
+            return [v?v.name:'',fmtDate(f.date),f.liters,f.rate,f.odometer,fmtMoney(f.liters*f.rate)];
+          })),
+      ]};
+    case 'zakat':
+      return { title:'Zakat & Charity Report', sections: [
+        pdfSection('Charity Ledger', ['Type','Recipient','Amount','Date'],
+          DATA.charityRecords.slice().reverse().map(c=>[c.type,c.recipient||'',fmtMoney(c.amount),fmtDate(c.date)])),
+      ]};
+    case 'solar':
+      return { title:'Solar & Utility Report', sections: [
+        pdfSection('Monthly Solar Logs', ['Month','Generated','Exported','Peak Units','Off-Peak Units','Tariff'],
+          DATA.solarLogs.map(l=>[l.month,l.generated,l.exported,l.peakUnits,l.offPeakUnits,l.tariff])),
+      ]};
+    case 'pantry':
+      return { title:'Pantry & Ration Report', sections: [
+        pdfSection('Pantry Items', ['Item','Quantity','Unit','Threshold'],
+          DATA.pantryItems.map(p=>[p.name,p.qty,p.unit||'',p.threshold||''])),
+      ]};
+    case 'vault':
+      return { title:'Emergency Contacts', sections: [
+        pdfSection('Emergency Contacts', ['Name','Category','Phone'],
+          DATA.emergencyContacts.map(c=>[c.name,c.category,c.phone])),
+        pdfSection('Encrypted Vault', [], []),
+      ], note:'Encrypted vault item values are never included in PDF exports for your security.' };
+    case 'events':
+      return { title:'Event Budget Report', sections: [
+        pdfSection('Events', ['Name','Date','Budget'],
+          DATA.events.map(e=>[e.name,fmtDate(e.date),fmtMoney(e.budget)])),
+        pdfSection('Line Items', ['Event','Item','Vendor','Amount','Advance'],
+          DATA.eventItems.slice().reverse().map(i=>{
+            const ev = DATA.events.find(x=>x.id===i.eventId);
+            return [ev?ev.name:'',i.item,i.vendor||'',fmtMoney(i.amount),fmtMoney(i.advance)];
+          })),
+      ]};
+    case 'goals':
+      return { title:'Savings Goals Report', sections: [
+        pdfSection('Goals', ['Name','Target','Saved','Target Date'],
+          DATA.goals.map(g=>[g.name,fmtMoney(g.target),fmtMoney(g.saved),fmtDate(g.targetDate)])),
+      ]};
+    default:
+      return null;
+  }
+}
+function exportPDF(){
+  const data = getPrintData(ROUTE);
+  if(!data){ toast('Is tab ke liye PDF export available nahi'); return; }
+  const area = $('#printArea');
+  area.innerHTML = `<h1>GharSaz 360 — ${escapeHtml(data.title)}</h1>
+    <div class="print-date">Generated on ${fmtDate(todayISO())}</div>
+    ${data.note?`<p class="print-empty">${escapeHtml(data.note)}</p>`:''}
+    ${data.sections.join('')}
+    <div class="print-footer">Generated by GharSaz 360 · 100% Offline App</div>`;
+  setTimeout(()=>{ window.print(); }, 150);
 }
