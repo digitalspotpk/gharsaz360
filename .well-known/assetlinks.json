@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "io.github.digitalspotpk.twa",
+    "sha256_cert_fingerprints": ["50:B7:6E:B6:69:28:FA:AA:00:18:D1:7E:60:4F:D3:C8:53:99:39:73:C5:C5:3C:F1:54:62:9D:80:EF:2A:DD:0A"]
+  }
+}]
