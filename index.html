@@ -292,6 +292,25 @@ kbd{background:var(--surface-2);padding:2px 6px;border-radius:6px;font-size:11px
   .fab{right:calc(50% - 320px + 18px);}
   .fab-wa{left:calc(50% - 320px + 18px);}
 }
+
+/* ---------- Print / PDF export ---------- */
+#printArea{display:none;}
+@media print{
+  body *{visibility:hidden !important;}
+  #printArea, #printArea *{visibility:visible !important;}
+  #printArea{
+    display:block !important; position:absolute; left:0; top:0; width:100%;
+    padding:24px; color:#111; background:#fff;
+  }
+  #printArea h1{font-size:20px;margin:0 0 4px;color:#065f46;}
+  #printArea .print-date{font-size:11px;color:#666;margin-bottom:18px;}
+  #printArea h2{font-size:14px;margin:20px 0 8px;color:#065f46;border-bottom:1px solid #ccc;padding-bottom:4px;}
+  #printArea table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:6px;}
+  #printArea th, #printArea td{border:1px solid #ddd;padding:6px 8px;text-align:left;}
+  #printArea th{background:#f0fdf4;color:#065f46;}
+  #printArea .print-empty{font-size:12px;color:#888;font-style:italic;}
+  #printArea .print-footer{margin-top:24px;font-size:10px;color:#999;text-align:center;}
+}
 </style>
 </head>
 <body>
@@ -319,12 +338,16 @@ kbd{background:var(--surface-2);padding:2px 6px;border-radius:6px;font-size:11px
       <h1 id="pageTitle">Dashboard</h1>
       <div class="sub" id="pageSub">Aaj ka khulasa</div>
     </div>
+    <button class="icon-btn" id="pdfBtn" aria-label="Download PDF"></button>
     <button class="icon-btn" id="themeBtn" aria-label="Toggle theme"></button>
     <button class="icon-btn" id="settingsBtn" aria-label="Settings"></button>
   </div>
 
   <main class="view" id="viewRoot"></main>
 </div>
+
+<!-- Print-only area, used to generate PDF via the browser's native print dialog -->
+<div id="printArea"></div>
 
 <!-- Floating actions -->
 <button class="fab" id="fabAdd" aria-label="Add"></button>
