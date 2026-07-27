@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Setup &amp; User Guide — GharSaz 360</title>
+<style>
+  :root{--teal:#059669;--teal-dark:#065f46;--text:#0b2b26;--dim:#4b6b64;--bg:#f2f7f5;--card:#ffffff;--border:#dbe8e3;--code:#0b2b26;}
+  *{box-sizing:border-box;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);margin:0;line-height:1.65;}
+  .layout{display:flex;max-width:1180px;margin:0 auto;}
+  nav.toc{width:250px;flex:none;padding:28px 16px;position:sticky;top:0;align-self:flex-start;height:100vh;overflow-y:auto;}
+  nav.toc a{display:block;padding:7px 12px;border-radius:10px;color:var(--dim);font-size:13px;font-weight:600;text-decoration:none;margin-bottom:2px;}
+  nav.toc a:hover{background:#d1fae5;color:var(--teal-dark);}
+  main{flex:1;padding:36px 30px 100px;min-width:0;}
+  header.hero{background:linear-gradient(135deg,#065f46,#059669 60%,#34d399);color:#fff;border-radius:22px;padding:36px 30px;margin-bottom:30px;}
+  header.hero h1{margin:0 0 8px;font-size:28px;}
+  header.hero p{margin:0;opacity:.9;font-size:14px;max-width:560px;}
+  section{margin-bottom:34px;scroll-margin-top:20px;}
+  h2{font-size:20px;border-bottom:2px solid #d1fae5;padding-bottom:10px;margin-bottom:16px;color:var(--teal-dark);}
+  h3{font-size:15px;margin:20px 0 8px;color:var(--text);}
+  p, li{font-size:14px;color:#254541;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px 22px;margin-bottom:16px;box-shadow:0 4px 14px rgba(6,46,38,.05);}
+  pre{background:#0b2b26;color:#d1fae5;padding:14px 16px;border-radius:12px;overflow-x:auto;font-size:13px;margin:10px 0;}
+  code{font-family:'SFMono-Regular',Consolas,Menlo,monospace;}
+  .card code, li code, p code{background:#e6f4f0;color:#065f46;padding:2px 7px;border-radius:6px;font-size:12.5px;}
+  .step{display:flex;gap:12px;margin-bottom:14px;}
+  .step .num{flex:none;width:26px;height:26px;border-radius:8px;background:#d1fae5;color:#065f46;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .badge{display:inline-block;background:#d1fae5;color:#065f46;font-weight:700;font-size:11px;padding:4px 10px;border-radius:999px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin:10px 0;}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);}
+  th{color:var(--dim);font-size:12px;text-transform:uppercase;}
+  .checklist li{margin-bottom:8px;}
+  .wa-btn{display:inline-flex;align-items:center;gap:8px;background:#25D366;color:#fff;padding:10px 18px;border-radius:12px;font-weight:700;text-decoration:none;font-size:13px;}
+  @media(max-width:900px){ nav.toc{display:none;} main{padding:24px 16px;} }
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="toc">
+    <a href="#intro">📘 Introduction</a>
+    <a href="#termux">1. Termux Setup</a>
+    <a href="#local">2. Local Testing</a>
+    <a href="#github">3. GitHub Pages Deploy</a>
+    <a href="#playstore">4. Play Store Packaging</a>
+    <a href="#modules">5. Module Guides</a>
+    <a href="#console">6. Play Console Checklist</a>
+    <a href="#backup">7. Backup &amp; Google Drive</a>
+    <a href="#support">8. Developer Support</a>
+  </nav>
+  <main>
+    <header class="hero" id="intro">
+      <h1>GharSaz 360 — Complete Setup &amp; User Guide</h1>
+      <p>Termux se GitHub Pages tak, aur GitHub Pages se Google Play Store tak — har qadam yahan maujood hai. Yeh guide developers aur end-users dono ke liye hai.</p>
+    </header>
+
+    <section id="termux">
+      <h2>1. Termux (Android Terminal) Environment Setup</h2>
+      <div class="card">
+        <p>Agar aap Android phone par hi terminal se kaam karna chahte hain, Termux install karein (F-Droid se recommended, Play Store version purana ho sakta hai).</p>
+        <div class="step"><div class="num">1</div><div>Packages update karein:
+          <pre>pkg update &amp;&amp; pkg upgrade -y</pre></div></div>
+        <div class="step"><div class="num">2</div><div>Zaroori tools install karein:
+          <pre>pkg install git nodejs-lts python gh -y</pre></div></div>
+        <div class="step"><div class="num">3</div><div>Storage permission dein (files transfer karne ke liye):
+          <pre>termux-setup-storage</pre></div></div>
+        <div class="step"><div class="num">4</div><div>Versions verify karein:
+          <pre>git --version
+node --version
+python --version
+gh --version</pre></div></div>
+      </div>
+    </section>
+
+    <section id="local">
+      <h2>2. Project Folder Banayen &amp; Local Test</h2>
+      <div class="card">
+        <div class="step"><div class="num">1</div><div>Project folder banayen aur files copy karein:
+          <pre>mkdir -p ~/gharsaz360 &amp;&amp; cd ~/gharsaz360
+# index.html, app.js, manifest.json, sw.js, privacy-policy.html,
+# guide.html aur sab icon PNGs isi folder mein copy karein</pre></div></div>
+        <div class="step"><div class="num">2</div><div>Local server chalayen:
+          <pre>python -m http.server 8080</pre></div></div>
+        <div class="step"><div class="num">3</div><div>Browser mein kholein (Chrome recommended for PWA testing):
+          <pre>http://localhost:8080</pre>
+          <p>App load hote hi 3-second splash screen dikhega, phir Dashboard khulega. Chrome DevTools → Application tab mein jakar "Service Workers" aur "Manifest" check kar sakte hain.</p></div></div>
+      </div>
+    </section>
+
+    <section id="github">
+      <h2>3. GitHub Pages Deployment (GitHub CLI)</h2>
+      <div class="card">
+        <div class="step"><div class="num">1</div><div>GitHub CLI se login karein:
+          <pre>gh auth login</pre></div></div>
+        <div class="step"><div class="num">2</div><div>Naya repository banayen aur push karein:
+          <pre>cd ~/gharsaz360
+git init
+git add .
+git commit -m "Initial commit: GharSaz 360"
+gh repo create gharsaz360 --public --source=. --remote=origin --push</pre></div></div>
+        <div class="step"><div class="num">3</div><div>GitHub Pages enable karein (branch publishing):
+          <pre>gh api -X PUT repos/:owner/gharsaz360/pages \
+  -f "source[branch]=main" -f "source[path]=/"</pre>
+          <p>Ya GitHub website par: <code>Repo → Settings → Pages → Branch: main → / (root) → Save</code>.</p></div></div>
+        <div class="step"><div class="num">4</div><div>Kuch minutes baad app live ho jayegi is URL par:
+          <pre>https://&lt;your-username&gt;.github.io/gharsaz360/</pre></div></div>
+      </div>
+    </section>
+
+    <section id="playstore">
+      <h2>4. Play Store Packaging (PWA → APK/AAB)</h2>
+      <div class="card">
+        <h3>Option A — PWABuilder.com (Easiest, no-code)</h3>
+        <div class="step"><div class="num">1</div><div>Browser mein <code>https://www.pwabuilder.com</code> kholein.</div></div>
+        <div class="step"><div class="num">2</div><div>Apna GitHub Pages URL paste karein aur "Start" dabayen — PWABuilder aapke manifest.json aur service worker ko scan karega.</div></div>
+        <div class="step"><div class="num">3</div><div>"Android" package option select karein, phir "Generate Package" dabayen — ye ek <code>.aab</code> file deta hai jo Play Store upload ke liye ready hoti hai.</div></div>
+        <div class="step"><div class="num">4</div><div>Signing key: PWABuilder khud generate kar sakta hai, ya aap apni key use kar sakte hain (recommended agar future updates bhi upload karni hain — key safe rakhein).</div></div>
+
+        <h3>Option B — Bubblewrap CLI (More control)</h3>
+        <div class="step"><div class="num">1</div><div>Bubblewrap install karein:
+          <pre>npm install -g @bubblewrap/cli</pre></div></div>
+        <div class="step"><div class="num">2</div><div>TWA project initialize karein:
+          <pre>bubblewrap init --manifest https://&lt;your-username&gt;.github.io/gharsaz360/manifest.json</pre></div></div>
+        <div class="step"><div class="num">3</div><div>Prompts follow karein (package name jaise <code>com.gharsaz360.app</code>, app name, signing key details).</div></div>
+        <div class="step"><div class="num">4</div><div>Build karein:
+          <pre>bubblewrap build</pre>
+          <p>Output: <code>app-release-signed.aab</code> — ye directly Play Console par upload hoti hai.</p></div></div>
+      </div>
+    </section>
+
+    <section id="modules">
+      <h2>5. Module-by-Module Operational Guide</h2>
+      <div class="grid2">
+        <div class="card"><h3>💰 Budgets &amp; Income</h3><p>Bottom nav → More → Budgets &amp; Income. "+" se naya budget banayen (name, estimated amount, period). Income Sources section mein Salary/Business/Rental income add karein. Progress bar green (&lt;70%), yellow (70–90%), red (&gt;90%) estimated spend dikhata hai.</p></div>
+        <div class="card"><h3>🧾 Expense Tracker</h3><p>Bottom nav → Expenses. Main category (Grocery, Health, Daily Living, Leisure) select karte hi sub-categories auto-load hoti hain. Har expense ko kisi budget se link kiya ja sakta hai. Chips se category-wise filter karein.</p></div>
+        <div class="card"><h3>🔑 House Rent</h3><p>Property add karein → Tenant add karein (property se link) → Rent Payment record karein. Sub-meter calculator mein previous/current reading aur unit rate dalte hi charge auto-calculate hota hai. "Receipt" button se professional receipt generate ho kar WhatsApp ya download ke zariye share hoti hai.</p></div>
+        <div class="card"><h3>👥 Udhar Khata</h3><p>Naya contact add karein, phir unpar tap karke "Given" ya "Taken" transactions record karein. Balance khud-ba-khud calculate hota hai. "Remind" button WhatsApp par pre-filled reminder message khol deta hai.</p></div>
+        <div class="card"><h3>🔨 Construction</h3><p>Project banayen → Material expenses add karein (project se linked) → Labour register mein worker add karke daily "Present / Half-Day / Absent" mark karein. Net payout khud calculate hota hai (wage × attendance − advance).</p></div>
+        <div class="card"><h3>📦 Assets &amp; Warranty</h3><p>Appliance add karein warranty expiry date ke sath. Badge automatically "Expired / X days left / X months left" dikhata hai.</p></div>
+        <div class="card"><h3>🔧 Maintenance Scheduler</h3><p>Task select karein (AC Servicing, Tank Cleaning, etc), last serviced aur next due date dalein. Dashboard par 14 din pehle reminder dikhega.</p></div>
+        <div class="card"><h3>🚗 Vehicle Log</h3><p>Vehicle add karein, phir har fuel-up par liters, rate aur odometer reading darj karein. App khud pichli entry se distance nikal kar km/liter mileage calculate karta hai.</p></div>
+        <div class="card"><h3>🌙 Zakat &amp; Charity</h3><p>"Zakat Calculator" kholen — cash, gold/silver grams aur unki price, business assets aur liabilities dalein. App silver-nisab (612.36g) ke against compare karke 2.5% zakat calculate karta hai. Charity Ledger mein Sadqah/Fitrana records rakhein.</p></div>
+        <div class="card"><h3>☀️ Solar &amp; Utility</h3><p>Har mahine generated/exported units aur peak/off-peak consumption dalein — estimated bill aur savings dashboard par dikhte hain.</p></div>
+        <div class="card"><h3>🧺 Pantry Planner</h3><p>Item ki current quantity aur minimum threshold set karein. Threshold se neeche aane par item "Shopping Checklist" mein aa jata hai — download button se text list mil jati hai.</p></div>
+        <div class="card"><h3>🔒 Document Vault</h3><p>Pehli dafa ek PIN set karein — is PIN se AES-256 encryption key banti hai. Ye PIN kahin save nahi hota, is liye yaad rakhein. Emergency Contacts (Doctor, Hospital, Electrician) bina PIN ke hi quick-access mein rehte hain.</p></div>
+        <div class="card"><h3>🎉 Event Budgeter</h3><p>Event banayen (jaise "Eid-ul-Adha Qurbani") total budget ke sath, phir line items (vendor, cost, advance) add karte jayen — progress bar overspend dikhata hai.</p></div>
+        <div class="card"><h3>🎯 Savings Goals</h3><p>Target amount aur date set karein. "+ Add Savings" se progress ring update hoti hai jab bhi paisay bachayen.</p></div>
+      </div>
+    </section>
+
+    <section id="console">
+      <h2>6. Google Play Console Upload Checklist</h2>
+      <div class="card checklist">
+        <ul>
+          <li>☑ App icon: <strong>512×512 PNG</strong> (32-bit, transparency allowed) — provided as <code>icon-512.png</code>.</li>
+          <li>☑ Feature graphic: <strong>1024×500 PNG/JPG</strong> — provided as <code>feature-graphic.png</code>.</li>
+          <li>☑ At least 2 phone screenshots (16:9 or 9:16) — take these from your live GitHub Pages app.</li>
+          <li>☑ Short description (max 80 chars) and full description (max 4000 chars).</li>
+          <li>☑ Privacy Policy URL — point to your deployed <code>privacy-policy.html</code>, e.g. <code>https://&lt;username&gt;.github.io/gharsaz360/privacy-policy.html</code>.</li>
+          <li>☑ Data Safety declaration: select <strong>"No data collected"</strong> since GharSaz 360 stores everything locally and has no backend server.</li>
+          <li>☑ Content rating questionnaire — complete honestly (finance/utility, no objectionable content).</li>
+          <li>☑ Target audience &amp; age group — select appropriately (this app is a general finance/utility tool).</li>
+          <li>☑ Upload the signed <code>.aab</code> from Step 4 to a new release under Production (or Internal Testing first).</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="backup">
+      <h2>7. Local Backup, CSV Export &amp; Google Drive Sync</h2>
+      <div class="card">
+        <h3>JSON / CSV Export &amp; Import</h3>
+        <p>Settings screen mein <strong>"Export JSON Backup"</strong> pura app data ek file mein save karta hai — isay periodically apne Drive/email par bhej dein. <strong>"Export CSV"</strong> spreadsheet-friendly summary deta hai. <strong>"Import JSON Backup"</strong> se purani backup file wapas load ki ja sakti hai (ye current data ko overwrite karti hai, is liye pehle export kar lein).</p>
+        <h3>Google Drive Integration (Optional, Developer Setup)</h3>
+        <div class="step"><div class="num">1</div><div><a href="https://console.cloud.google.com" target="_blank">Google Cloud Console</a> mein naya project banayen aur "Google Drive API" enable karein.</div></div>
+        <div class="step"><div class="num">2</div><div>OAuth Consent Screen configure karein aur ek "OAuth Client ID" (type: Web application) banayen, jisme aapki GitHub Pages URL "Authorized JavaScript origins" mein add ho.</div></div>
+        <div class="step"><div class="num">3</div><div>App ke Settings module mein apna Client ID configure karein taake export ki gayi JSON file seedha aapke Google Drive "App Data" folder mein upload ho sake — is process mein koi developer server involve nahi hota.</div></div>
+      </div>
+    </section>
+
+    <section id="support">
+      <h2>8. Developer Support</h2>
+      <div class="card" style="text-align:center">
+        <p>Kisi bhi setup, deployment ya bug se related sawal ke liye seedha WhatsApp par contact karein:</p>
+        <a class="wa-btn" href="https://wa.me/923065772734?text=Hello%2C%20I%20need%20assistance%20with%20GharSaz%20360%20App" target="_blank">💬 Chat on WhatsApp — +92 306 5772734</a>
+      </div>
+    </section>
+
+  </main>
+</div>
+</body>
+</html>
