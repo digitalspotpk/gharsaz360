@@ -55,6 +55,7 @@ const ICN = {
   umbrella:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 0 1 10 10H2A10 10 0 0 1 12 2Z"/><path d="M12 12v8a2 2 0 0 1-4 0"/><path d="M12 2v2"/></svg>`,
   heartpulse:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.5-1.6 3-3.4 3-5.5A5.5 5.5 0 0 0 12 5.6 5.5 5.5 0 0 0 2 8.5C2 12 5 15 12 20c3-2 5-3.6 6.4-5"/><path d="M3.5 9h4l2-3 3 6 2-3h5"/></svg>`,
   gift:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M12 8c-1.5 0-3-1-3-2.5S10.3 3 12 4.5C13.7 3 15 4 15 5.5S13.5 8 12 8Z"/></svg>`,
+  refresh:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/></svg>`,
 };
 function icon(name, color){ return `<span style="color:${color||'currentColor'};display:flex">${ICN[name]||''}</span>`; }
 
@@ -2680,6 +2681,9 @@ function renderSettings(){
 
   <div class="section-title">Backup &amp; Restore</div>
   <div class="card">
+    <button class="btn btn-outline btn-block" id="checkUpdatesBtn">${ICN.refresh} Check for Updates / Refresh App</button>
+    <div class="help-text">Ya app ke andar sab se upar se neeche ki taraf swipe (pull-to-refresh) karein.</div>
+    <div class="divider"></div>
     <button class="btn btn-primary btn-block" onclick="exportJSON()">${ICN.down} Export JSON Backup</button>
     <div style="height:10px"></div>
     <button class="btn btn-outline btn-block" onclick="exportCSV()">${ICN.down} Export CSV</button>
@@ -2718,6 +2722,7 @@ function renderSettings(){
   $('#viewRoot').innerHTML = html;
   $('#importFile').addEventListener('change', (e)=>{ if(e.target.files[0]) importJSON(e.target.files[0]); });
   $('#toggleThemeSettings').addEventListener('click', toggleTheme);
+  $('#checkUpdatesBtn').addEventListener('click', doRefresh);
 }
 
 /* ---------------------------------------------------------------------- *
@@ -2811,6 +2816,7 @@ function initApp(){
   try{
     initTheme();
     initTopbarButtons();
+    initPullToRefresh();
     const initialRoute = location.hash.replace('#','');
     ROUTE = ALL_MODULES.some(m=>m.id===initialRoute) ? initialRoute : 'dashboard';
     renderRoute();
@@ -2828,6 +2834,75 @@ function initApp(){
   }
 }
 document.addEventListener('DOMContentLoaded', initApp);
+
+/* ---------------------------------------------------------------------- *
+ * PULL TO REFRESH — swipe down from the top of the app to refresh.
+ * Clears any cached service-worker files (so hosted GitHub Pages users
+ * actually receive updates) and reloads the app. On the standalone
+ * file:// build there's no service worker/cache to clear, so this simply
+ * reloads the page, which is harmless — all data stays in localStorage.
+ * ---------------------------------------------------------------------- */
+function initPullToRefresh(){
+  const indicator = $('#pullIndicator');
+  if(!indicator) return;
+  const THRESHOLD = 68;
+  const MAX_PULL = 105;
+  let startY = 0, pulling = false, currentPull = 0, refreshing = false;
+
+  function resetIndicator(){
+    indicator.style.transform = 'translate(-50%, -60px) rotate(0deg)';
+    indicator.classList.remove('visible');
+  }
+  function onTouchStart(e){
+    if(refreshing) return;
+    if(window.scrollY > 0) return;
+    if($('#overlay').classList.contains('show')) return; // don't fight with open modal sheets
+    startY = e.touches[0].clientY;
+    pulling = true;
+    currentPull = 0;
+  }
+  function onTouchMove(e){
+    if(!pulling || refreshing) return;
+    const dy = e.touches[0].clientY - startY;
+    if(dy <= 0 || window.scrollY > 0){ resetIndicator(); pulling = false; return; }
+    currentPull = Math.min(MAX_PULL, dy * 0.5);
+    const translateY = -60 + currentPull;
+    indicator.style.transform = `translate(-50%, ${translateY}px) rotate(${currentPull*3}deg)`;
+    indicator.classList.add('visible');
+    if(currentPull > 8) e.preventDefault();
+  }
+  function onTouchEnd(){
+    if(!pulling || refreshing) return;
+    pulling = false;
+    if(currentPull >= THRESHOLD) triggerRefresh();
+    else resetIndicator();
+    currentPull = 0;
+  }
+  document.addEventListener('touchstart', onTouchStart, {passive:true});
+  document.addEventListener('touchmove', onTouchMove, {passive:false});
+  document.addEventListener('touchend', onTouchEnd, {passive:true});
+
+  function triggerRefresh(){
+    refreshing = true;
+    indicator.style.transform = 'translate(-50%, 16px) rotate(0deg)';
+    indicator.classList.add('visible', 'spinning');
+    doRefresh();
+  }
+}
+async function doRefresh(){
+  toast('App refresh ho rahi hai...');
+  try{
+    if('serviceWorker' in navigator){
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for(const reg of regs){ await reg.update(); }
+    }
+    if('caches' in window){
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k=>caches.delete(k)));
+    }
+  }catch(e){ console.warn('Refresh cache-clear failed:', e); }
+  setTimeout(()=>{ location.reload(); }, 350);
+}
 
 /* Register service worker for offline caching (GitHub Pages / TWA ready).
    Skipped automatically on file:// (standalone single-file usage) since
