@@ -293,6 +293,19 @@ kbd{background:var(--surface-2);padding:2px 6px;border-radius:6px;font-size:11px
   .fab-wa{left:calc(50% - 320px + 18px);}
 }
 
+/* ---------- Pull to Refresh ---------- */
+#pullIndicator{
+  position:fixed; top:0; left:50%; transform:translate(-50%,-60px) rotate(0deg);
+  width:42px;height:42px;border-radius:50%;
+  background:var(--surface); box-shadow:var(--shadow-lg); color:var(--teal-600);
+  display:flex;align-items:center;justify-content:center;
+  z-index:70; opacity:0; transition:opacity .2s ease;
+  pointer-events:none;
+}
+#pullIndicator.visible{opacity:1;}
+#pullIndicator.spinning svg{animation:ptrSpin .8s linear infinite;}
+@keyframes ptrSpin{to{transform:rotate(360deg);}}
+
 /* ---------- Print / PDF export ---------- */
 #printArea{display:none;}
 @media print{
@@ -314,6 +327,11 @@ kbd{background:var(--surface-2);padding:2px 6px;border-radius:6px;font-size:11px
 </style>
 </head>
 <body>
+
+<!-- Pull-to-refresh indicator -->
+<div id="pullIndicator">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/></svg>
+</div>
 
 <!-- ================= SPLASH SCREEN ================= -->
 <div id="splash">
