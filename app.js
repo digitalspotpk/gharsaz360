@@ -199,13 +199,24 @@ function saveSettings(){ localStorage.setItem(SETTINGS_KEY, JSON.stringify(SETTI
  * 4. EXPENSE CATEGORY TREE (preset, deeply nested)
  * ---------------------------------------------------------------------- */
 const CATEGORY_TREE = {
-  'Grocery & Pantry': ['Vegetables','Fruits','Milk/Dairy','Meat/Chicken','Grains/Flour','Spices/Oils','Beverages','Snacks','Cleaning Supplies','Toiletries'],
-  'Health & Medical': ['Doctor Consultations','Medicines','Lab Tests/Reports','Emergency Hospitalization','Dental','Health Insurance','Pharmacy Items'],
-  'Daily Living': ['Electricity Bill','Gas Bill','Water/Trash','Internet/Wifi','Mobile Load/Packages','Fuel/Petrol','Vehicle Repair','Maid/Servant Salary','Kids Pocket Money','School Fees','Home Maintenance'],
-  'Leisure & Shopping': ['Dining Out','Clothes','Footwear','Gifts','Entertainment'],
+  'Grocery & Pantry': ['Vegetables','Fruits','Milk/Dairy','Eggs','Meat/Chicken/Fish','Grains/Flour/Rice','Pulses/Daal','Spices/Oils','Sugar/Salt/Tea','Bakery Items','Frozen Food','Dry Fruits/Nuts','Beverages','Snacks','Pickles/Sauces','Baby Food/Formula','Cleaning Supplies','Toiletries'],
+  'Health & Medical': ['Doctor Consultations','Medicines','Lab Tests/Reports','Emergency/Hospitalization','Dental','Vaccinations','Physiotherapy','Optical/Eyewear','Vitamins/Supplements','Mental Health/Therapy','Ambulance','Pharmacy Items'],
+  'Utilities & Bills': ['Electricity Bill','Gas Bill','Water/Sewerage','Internet/Wifi','Mobile Load/Packages','Cable/DTH','Society/Maintenance Charges','Security/Guard Fee'],
+  'Transport & Vehicle': ['Fuel/Petrol','Vehicle Repair/Servicing','Public Transport','Rickshaw/Taxi','Ride-hailing (Careem/Uber)','Parking Fee','Toll Tax','Vehicle Token Tax/Documents'],
+  'Home & Domestic Staff': ['Maid/Servant Salary','Driver Salary','Cook Salary','Guard Salary','Home Maintenance/Repair','Furniture','Home Décor','Kitchenware/Utensils'],
+  'Education': ['School/College Fees','Tuition/Coaching','Books/Stationery','University Fees','Exam/Admission Fees','Uniform','Kids Pocket Money','Educational Trips'],
+  'Personal Care & Habits': ['Salon/Barber','Cosmetics/Makeup','Perfume','Cigarettes','Naswar/Paan/Gutka','Vaping/E-cigarette','Skincare Products','Haircare Products'],
+  'Insurance & Financial': ['Life Insurance','Health Insurance','Vehicle Insurance','Home/Property Insurance','Bank Charges/Fees','Loan Installment','Investment/Savings','Credit Card Payment'],
+  'Leisure & Entertainment': ['Dining Out','Movies/Cinema','Sports/Gym Membership','Hobbies','Clothes','Footwear','Electronics/Gadgets','Travel/Vacation','Games/App Subscriptions'],
+  'Religious & Social': ['Zakat','Sadqah/Charity','Mosque Donation','Wedding/Function Gifts','Funeral Expenses','Aqiqah/Qurbani','Umrah/Hajj Savings'],
+  'Pets': ['Pet Food','Vet Charges','Pet Accessories/Grooming'],
+  'Miscellaneous': ['Stationery/Printing','Courier/Postage','Legal Fees','General Gifts','Fine/Penalty','Lost/Stolen','Other'],
 };
 const CATEGORY_COLORS = {
-  'Grocery & Pantry':'#10b981','Health & Medical':'#ef4444','Daily Living':'#0ea5e9','Leisure & Shopping':'#8b5cf6'
+  'Grocery & Pantry':'#10b981','Health & Medical':'#ef4444','Utilities & Bills':'#0ea5e9',
+  'Transport & Vehicle':'#f59e0b','Home & Domestic Staff':'#8b5cf6','Education':'#3b82f6',
+  'Personal Care & Habits':'#ec4899','Insurance & Financial':'#14b8a6','Leisure & Entertainment':'#a855f7',
+  'Religious & Social':'#059669','Pets':'#f97316','Miscellaneous':'#6b7280',
 };
 
 /* ---------------------------------------------------------------------- *
