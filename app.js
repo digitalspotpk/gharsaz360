@@ -47,6 +47,14 @@ const ICN = {
   bell:  `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>`,
   search:`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>`,
   briefcase:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><path d="M2 13h20"/></svg>`,
+  hardhat:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18v-2a8 8 0 0 1 16 0v2"/><path d="M2 18h20"/><path d="M12 4v6"/><path d="M9 4h6"/></svg>`,
+  checksquare:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="m8 12 3 3 5-6"/></svg>`,
+  check:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`,
+  bank:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M4 21V9l8-6 8 6v12"/><path d="M9 21v-6h6v6"/></svg>`,
+  repeat:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`,
+  umbrella:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 0 1 10 10H2A10 10 0 0 1 12 2Z"/><path d="M12 12v8a2 2 0 0 1-4 0"/><path d="M12 2v2"/></svg>`,
+  heartpulse:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.5-1.6 3-3.4 3-5.5A5.5 5.5 0 0 0 12 5.6 5.5 5.5 0 0 0 2 8.5C2 12 5 15 12 20c3-2 5-3.6 6.4-5"/><path d="M3.5 9h4l2-3 3 6 2-3h5"/></svg>`,
+  gift:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M12 8c-1.5 0-3-1-3-2.5S10.3 3 12 4.5C13.7 3 15 4 15 5.5S13.5 8 12 8Z"/></svg>`,
 };
 function icon(name, color){ return `<span style="color:${color||'currentColor'};display:flex">${ICN[name]||''}</span>`; }
 
@@ -116,6 +124,9 @@ function defaultState(){
     events: [], eventItems: [],
     goals: [], goalTx: [],
     employees: [], staffAttendance: [], salaryAdvances: [], salaryPayments: [],
+    labourWorkers: [], labourAttendance: [], labourAdvances: [], labourPayments: [],
+    todos: [], bills: [], familyMembers: [], loans: [], loanPayments: [],
+    subscriptions: [], insurancePolicies: [], healthRecords: [], importantDates: [],
   };
 }
 let DATA = loadData();
@@ -128,8 +139,28 @@ function loadData(){
   }catch(e){ console.error('load error', e); return defaultState(); }
 }
 function saveData(){
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+  }catch(e){
+    console.error('save error', e);
+    showErrorScreen('Data Save Nahi Ho Saka',
+      'Aapke device par storage full hai ya browser ne local storage block kar diya hai (kabhi kabhi "Incognito/Private" mode mein aisa hota hai). Kripya normal browsing mode mein app kholein, ya kuch purana data export/delete kar ke jagah banayen.');
+  }
 }
+function showErrorScreen(title, msg){
+  const scr = $('#errorScreen');
+  $('#errorTitle').textContent = title || 'Kuch Ghalat Ho Gaya';
+  $('#errorMsg').textContent = msg || 'Ek unexpected error aa gayi hai. Aapka data mehfooz hai — app reload karke dobara try karein.';
+  scr.style.display = 'flex';
+}
+function hideErrorScreen(){ $('#errorScreen').style.display = 'none'; }
+window.addEventListener('error', (e)=>{
+  console.error('Uncaught error:', e.error||e.message);
+  showErrorScreen('Kuch Ghalat Ho Gaya', 'Ek unexpected technical error aa gayi hai. Aapka data mehfooz hai (locally saved) — "Reload App" dabayen.');
+});
+window.addEventListener('unhandledrejection', (e)=>{
+  console.error('Unhandled promise rejection:', e.reason);
+});
 let SETTINGS = loadSettings();
 function loadSettings(){
   try{
@@ -170,6 +201,15 @@ const ALL_MODULES = [
   {id:'udhar', label:'Udhar Khata', icon:'users', color:'#8b5cf6'},
   {id:'construction', label:'Construction', icon:'hammer', color:'#b45309'},
   {id:'salary', label:'Salary Management', icon:'briefcase', color:'#4f46e5'},
+  {id:'labour', label:'Labour Management', icon:'hardhat', color:'#c2410c'},
+  {id:'todos', label:'To-Do / Tasks', icon:'checksquare', color:'#0e7490'},
+  {id:'bills', label:'Bill Reminders', icon:'bell', color:'#b45309'},
+  {id:'familyMembers', label:'Family Members', icon:'users', color:'#db2777'},
+  {id:'loans', label:'Loan / EMI Tracker', icon:'bank', color:'#1d4ed8'},
+  {id:'subscriptions', label:'Subscriptions', icon:'repeat', color:'#7c3aed'},
+  {id:'insurancePolicies', label:'Insurance Policies', icon:'umbrella', color:'#0369a1'},
+  {id:'healthRecords', label:'Health Records', icon:'heartpulse', color:'#dc2626'},
+  {id:'importantDates', label:'Important Dates', icon:'gift', color:'#be185d'},
   {id:'assets', label:'Assets & Warranty', icon:'box', color:'#0369a1'},
   {id:'maintenance', label:'Maintenance', icon:'wrench', color:'#475569'},
   {id:'vehicle', label:'Vehicle Log', icon:'car', color:'#dc2626'},
@@ -194,6 +234,15 @@ window.addEventListener('hashchange', ()=>{
   const r = location.hash.replace('#','') || 'dashboard';
   ROUTE = r; renderRoute();
 });
+function renderNotFound(){
+  $('#viewRoot').innerHTML = `
+    <div class="empty" style="padding-top:60px">
+      <div style="font-size:56px;font-weight:800;color:var(--border);line-height:1;margin-bottom:10px">404</div>
+      <div style="font-weight:800;font-size:16px;color:var(--text)">Ye Page Nahi Mila</div>
+      <div style="font-size:13px;margin:8px 0 20px">Jo link ya section aap dhoond rahe hain wo mojood nahi hai. Shayad link purana ho ya galat ho.</div>
+      <button class="btn btn-primary" onclick="navigate('dashboard')">Home Par Wapis Jayen</button>
+    </div>`;
+}
 
 function renderTopbar(){
   const mod = ALL_MODULES.find(m=>m.id===ROUTE) || ALL_MODULES[0];
@@ -202,6 +251,11 @@ function renderTopbar(){
     dashboard:'Aaj ka khulasa', budgets:'Estimated vs actual', expenses:'Sab kharchay ek jaga',
     rent:'Properties, tenants, receipts', udhar:'Udhar len-den ledger', construction:'Material & labour',
     salary:'Staff, attendance & payroll',
+    labour:'Daily/monthly wage & payments',
+    todos:'Aaj ke kaam', bills:'Utility bills & due dates', familyMembers:'Ghar ke afraad',
+    loans:'Bank loans & EMI tracking', subscriptions:'Recurring memberships',
+    insurancePolicies:'Policies & premiums', healthRecords:'Prescriptions & appointments',
+    importantDates:'Birthdays & anniversaries',
     assets:'Warranty tracker', maintenance:'Servicing reminders', vehicle:'Fuel & mileage',
     zakat:'Calculator & charity', solar:'Generation & bill estimate', pantry:'Ration ka hisaab',
     vault:'Encrypted local vault', events:'Occasion budgets', goals:'Apke targets', settings:'Backup & preferences',
@@ -227,6 +281,10 @@ function renderFab(){
     budgets:'budgets', expenses:'expenses', rent:'rent-picker', udhar:'udhars',
     construction:'construction-picker', assets:'assets', maintenance:'maintenanceLogs',
     salary:'salary-picker',
+    labour:'labour-picker',
+    todos:'todos', bills:'bills', familyMembers:'familyMembers', loans:'loans',
+    subscriptions:'subscriptions', insurancePolicies:'insurancePolicies',
+    healthRecords:'healthRecords', importantDates:'importantDates',
     vehicle:'vehicle-picker', zakat:'zakat-picker', solar:'solarLogs', pantry:'pantryItems',
     vault:'vault-picker', events:'events-picker', goals:'goals',
   };
@@ -378,6 +436,91 @@ const SCHEMAS = {
       {key:'odometer', label:'Current Odometer (km)', type:'number'},
     ]
   },
+  todos: {
+    title:'Task', arrayKey:'todos', color:'#0e7490', icon:'checksquare', defaults:{status:'Pending'},
+    fields:[
+      {key:'title', label:'Task', type:'text', required:true, placeholder:'e.g. Bijli ka bill jama karwana'},
+      {key:'category', label:'Category', type:'select', options:['Home','Work','Shopping','Personal','Other']},
+      {key:'dueDate', label:'Due Date', type:'date'},
+      {key:'priority', label:'Priority', type:'select', options:['Low','Medium','High']},
+    ]
+  },
+  bills: {
+    title:'Bill', arrayKey:'bills', color:'#b45309', icon:'bell', defaults:{status:'Unpaid'},
+    fields:[
+      {key:'name', label:'Bill', type:'select', options:['Electricity Bill','Gas Bill','Water Bill','Internet/Wifi','Mobile Bill','Cable/DTH','School Fee','House Rent','Other'], required:true},
+      {key:'amount', label:'Amount (Rs)', type:'number', required:true},
+      {key:'dueDate', label:'Due Date', type:'date', required:true},
+      {key:'recurring', label:'Recurring', type:'select', options:['Monthly','Yearly','One-time']},
+    ]
+  },
+  familyMembers: {
+    title:'Family Member', arrayKey:'familyMembers', color:'#db2777', icon:'users',
+    fields:[
+      {key:'name', label:'Name', type:'text', required:true},
+      {key:'relation', label:'Relation', type:'select', options:['Self','Spouse','Son','Daughter','Father','Mother','Brother','Sister','Other']},
+      {key:'dob', label:'Date of Birth', type:'date'},
+      {key:'bloodGroup', label:'Blood Group', type:'select', options:['A+','A-','B+','B-','O+','O-','AB+','AB-','Unknown']},
+      {key:'cnic', label:'CNIC / ID', type:'text'},
+      {key:'phone', label:'Phone Number', type:'text'},
+      {key:'notes', label:'Notes', type:'textarea'},
+    ]
+  },
+  loans: {
+    title:'Loan / EMI', arrayKey:'loans', color:'#1d4ed8', icon:'bank',
+    fields:[
+      {key:'name', label:'Loan Name', type:'text', required:true, placeholder:'e.g. Car Loan - Meezan Bank'},
+      {key:'lender', label:'Lender / Bank', type:'text'},
+      {key:'principal', label:'Total Loan Amount (Rs)', type:'number', required:true},
+      {key:'monthlyEMI', label:'Monthly EMI (Rs)', type:'number', required:true},
+      {key:'startDate', label:'Start Date', type:'date'},
+      {key:'tenureMonths', label:'Tenure (Months)', type:'number'},
+      {key:'nextDueDate', label:'Next EMI Due Date', type:'date'},
+    ]
+  },
+  subscriptions: {
+    title:'Subscription', arrayKey:'subscriptions', color:'#7c3aed', icon:'repeat', defaults:{status:'Active'},
+    fields:[
+      {key:'name', label:'Service Name', type:'text', required:true, placeholder:'e.g. Netflix, Jazz Postpaid'},
+      {key:'category', label:'Category', type:'select', options:['Streaming','Mobile Plan','Internet','Membership','Software','Other']},
+      {key:'amount', label:'Amount (Rs)', type:'number', required:true},
+      {key:'billingCycle', label:'Billing Cycle', type:'select', options:['Monthly','Yearly']},
+      {key:'nextRenewalDate', label:'Next Renewal Date', type:'date'},
+      {key:'status', label:'Status', type:'select', options:['Active','Cancelled']},
+    ]
+  },
+  insurancePolicies: {
+    title:'Insurance Policy', arrayKey:'insurancePolicies', color:'#0369a1', icon:'umbrella',
+    fields:[
+      {key:'type', label:'Policy Type', type:'select', options:['Life','Health','Vehicle','Home','Other'], required:true},
+      {key:'provider', label:'Insurance Provider', type:'text'},
+      {key:'policyNumber', label:'Policy Number', type:'text'},
+      {key:'premiumAmount', label:'Premium Amount (Rs)', type:'number'},
+      {key:'premiumCycle', label:'Premium Cycle', type:'select', options:['Monthly','Yearly']},
+      {key:'coverageAmount', label:'Coverage Amount (Rs)', type:'number'},
+      {key:'expiryDate', label:'Expiry Date', type:'date'},
+    ]
+  },
+  healthRecords: {
+    title:'Health Record', arrayKey:'healthRecords', color:'#dc2626', icon:'heartpulse',
+    fields:[
+      {key:'memberName', label:'Family Member', type:'text', required:true, placeholder:'e.g. Ali, Ammi'},
+      {key:'recordType', label:'Record Type', type:'select', options:['Prescription','Appointment','Lab Test','Vaccination','Other']},
+      {key:'doctor', label:'Doctor / Clinic', type:'text'},
+      {key:'date', label:'Date', type:'date'},
+      {key:'nextAppointment', label:'Next Appointment (if any)', type:'date'},
+      {key:'notes', label:'Notes', type:'textarea'},
+    ]
+  },
+  importantDates: {
+    title:'Important Date', arrayKey:'importantDates', color:'#be185d', icon:'gift',
+    fields:[
+      {key:'title', label:'Title', type:'text', required:true, placeholder:'e.g. Ammi ki Birthday'},
+      {key:'type', label:'Type', type:'select', options:['Birthday','Anniversary','Religious','Other']},
+      {key:'date', label:'Date', type:'date', required:true},
+      {key:'notes', label:'Notes', type:'text'},
+    ]
+  },
 };
 
 function handleFab(route){
@@ -385,6 +528,7 @@ function handleFab(route){
     'rent-picker': [['Add Property','properties'],['Add Tenant','tenants'],['Record Payment','rentPayments']],
     'construction-picker': [['New Project','constructionProjects'],['Add Material Expense','materials'],['Add Labourer','labourers']],
     'salary-picker': [['Add Employee','employees'],['Give Advance/Loan','salaryAdvances'],['Record Salary Payment','salaryPayments']],
+    'labour-picker': [['Add Worker','labourWorkers'],['Give Advance','labourAdvances'],['Record Payment','labourPayments']],
     'vehicle-picker': [['Add Vehicle','vehicles'],['Add Fuel Entry','fuelLogs']],
     'zakat-picker': [['Zakat Calculator','zakatCalc'],['Add Charity Record','charityRecords']],
     'vault-picker': [['Add Vault Item','vaultItems'],['Add Emergency Contact','emergencyContacts']],
@@ -423,6 +567,9 @@ function openGenericForm(arrayKey, editId){
   if(arrayKey==='employees') return openEmployeeForm(editId);
   if(arrayKey==='salaryAdvances') return openSalaryAdvanceForm(editId);
   if(arrayKey==='salaryPayments') return openSalaryPaymentForm(editId);
+  if(arrayKey==='labourWorkers') return openLabourWorkerForm(editId);
+  if(arrayKey==='labourAdvances') return openLabourAdvanceForm(editId);
+  if(arrayKey==='labourPayments') return openLabourPaymentForm(editId);
 
   const schema = SCHEMAS[arrayKey];
   if(!schema) return;
@@ -453,7 +600,7 @@ function openGenericForm(arrayKey, editId){
           vals.projectId = proj? proj.id : null;
         }
         if(editItem) Object.assign(editItem, vals);
-        else DATA[arrayKey].push({id:uid(), ...vals});
+        else DATA[arrayKey].push({id:uid(), ...(schema.defaults||{}), ...vals});
         saveData(); closeSheet(); toast('Saved'); renderRoute();
       });
       if(editItem){
@@ -486,6 +633,28 @@ function renderDashboard(){
   const warrantySoon = DATA.assets.filter(a=>{
     const d = daysUntil(a.warrantyExpiry); return d!==null && d<=30 && d>=0;
   }).length;
+  const billsDue = DATA.bills.filter(b=>{
+    if(b.status==='Paid') return false;
+    const d = daysUntil(b.dueDate); return d!==null && d<=5 && d>=0;
+  }).length;
+  const overdueTasks = DATA.todos.filter(t=>{
+    if(t.status==='Done') return false;
+    const d = daysUntil(t.dueDate); return d!==null && d<0;
+  }).length;
+  const emiDue = DATA.loans.filter(l=>{
+    const d = daysUntil(l.nextDueDate); return d!==null && d<=7 && d>=0;
+  }).length;
+  const subsRenewing = DATA.subscriptions.filter(s=>{
+    if(s.status==='Cancelled') return false;
+    const d = daysUntil(s.nextRenewalDate); return d!==null && d<=7 && d>=0;
+  }).length;
+  const policiesExpiring = DATA.insurancePolicies.filter(p=>{
+    const d = daysUntil(p.expiryDate); return d!==null && d<=30 && d>=0;
+  }).length;
+  const birthdaysSoon = DATA.familyMembers.filter(m=>{
+    const next = nextYearlyOccurrence(m.dob); const d = next?daysUntil(next):null;
+    return d!==null && d<=7;
+  }).length;
 
   let html = `
   <div class="grid-2">
@@ -509,8 +678,14 @@ function renderDashboard(){
     </div>
   </div>`;
 
-  if(upcomingMaint || warrantySoon){
+  if(upcomingMaint || warrantySoon || billsDue || overdueTasks || emiDue || subsRenewing || policiesExpiring || birthdaysSoon){
     html += `<div class="section-title">Reminders</div><div class="card">`;
+    if(overdueTasks) html += reminderRow('checksquare','#0e7490', overdueTasks+' task(s) overdue', ()=>navigate('todos'));
+    if(billsDue) html += reminderRow('bell','#b45309', billsDue+' bill(s) due in 5 days', ()=>navigate('bills'));
+    if(emiDue) html += reminderRow('bank','#1d4ed8', emiDue+' EMI(s) due in 7 days', ()=>navigate('loans'));
+    if(birthdaysSoon) html += reminderRow('gift','#be185d', birthdaysSoon+' birthday(s) in next 7 days', ()=>navigate('familyMembers'));
+    if(subsRenewing) html += reminderRow('repeat','#7c3aed', subsRenewing+' subscription(s) renewing soon', ()=>navigate('subscriptions'));
+    if(policiesExpiring) html += reminderRow('umbrella','#0369a1', policiesExpiring+' insurance policy(ies) expiring in 30 days', ()=>navigate('insurancePolicies'));
     if(upcomingMaint) html += reminderRow('wrench','#475569', upcomingMaint+' maintenance task(s) due in 14 days', ()=>navigate('maintenance'));
     if(warrantySoon) html += reminderRow('box','#0369a1', warrantySoon+' warranty(ies) expiring in 30 days', ()=>navigate('assets'));
     html += `</div>`;
@@ -1474,6 +1649,473 @@ function renderSalary(){
 }
 
 /* ---------------------------------------------------------------------- *
+ * 13C. LABOUR MANAGEMENT  (general daily/monthly wage workers — separate
+ *      from Construction's project-linked labour, and from Salary
+ *      Management's fixed monthly staff. Covers casual/daily labour with
+ *      either daily-wage or monthly-wage settlement and a clear
+ *      Sent / Pending / Partial payment ledger.)
+ * ---------------------------------------------------------------------- */
+function openLabourWorkerForm(editId){
+  const editItem = editId ? DATA.labourWorkers.find(x=>x.id===editId) : null;
+  const fields = [
+    {key:'name', label:'Worker Name', type:'text', required:true},
+    {key:'role', label:'Role / Trade', type:'select', options:['Mason/Karigar','Helper/Mazdoor','Electrician','Plumber','Painter','Carpenter','Gardener/Mali','Farm Worker','Cleaner','Other']},
+    {key:'wageType', label:'Wage Type', type:'select', options:['Daily','Monthly']},
+    {key:'wageRate', label:'Wage Rate (Rs) — per day or per month', type:'number', required:true},
+    {key:'phone', label:'Phone Number', type:'text'},
+    {key:'joiningDate', label:'Start Date', type:'date'},
+    {key:'status', label:'Status', type:'select', options:['Active','Inactive']},
+  ];
+  openSheet(`${sheetHeader((editItem?'Edit ':'Add ')+'Worker')}
+    <form id="lwForm">${fields.map(f=>renderField(f, editItem?editItem[f.key]:(f.key==='joiningDate'?todayISO():(f.key==='status'?'Active':(f.key==='wageType'?'Daily':''))))).join('')}
+      <div style="display:flex;gap:10px">
+        ${editItem?`<button type="button" class="btn btn-danger" id="delLW">${ICN.trash}</button>`:''}
+        <button type="submit" class="btn btn-primary btn-block">${editItem?'Update':'Save Worker'}</button>
+      </div></form>`, (root)=>{
+      $('#lwForm', root).addEventListener('submit', e=>{
+        e.preventDefault();
+        const vals = readForm(e.target, fields);
+        if(editItem) Object.assign(editItem, vals);
+        else DATA.labourWorkers.push({id:uid(), ...vals});
+        saveData(); closeSheet(); toast('Worker saved'); renderRoute();
+      });
+      if(editItem) $('#delLW', root).addEventListener('click', ()=>{
+        if(confirm('Delete this worker? Their history will remain but unlinked.')){
+          DATA.labourWorkers = DATA.labourWorkers.filter(x=>x.id!==editId);
+          saveData(); closeSheet(); renderRoute();
+        }
+      });
+    });
+}
+function markLabourAttendance(workerId, status){
+  DATA.labourAttendance.push({id:uid(), workerId, date:todayISO(), status});
+  saveData(); toast('Attendance marked: '+status); renderRoute();
+}
+function labourAdvanceOutstanding(workerId){
+  return DATA.labourAdvances.filter(a=>a.workerId===workerId && !a.settled)
+    .reduce((s,a)=>s+Number(a.amount||0),0);
+}
+function labourMonthAttendance(workerId, mKey){
+  return DATA.labourAttendance.filter(a=>a.workerId===workerId && monthKey(a.date)===mKey);
+}
+function labourEstimatedDue(w){
+  const mKey = monthKey();
+  const att = labourMonthAttendance(w.id, mKey);
+  const rate = Number(w.wageRate||0);
+  let gross = 0;
+  if(w.wageType==='Daily'){
+    const present = att.filter(a=>a.status==='Present').length;
+    const half = att.filter(a=>a.status==='Half-Day').length;
+    gross = present*rate + half*(rate/2);
+  } else {
+    const perDay = rate/30;
+    const absent = att.filter(a=>a.status==='Absent').length;
+    const half = att.filter(a=>a.status==='Half-Day').length;
+    gross = rate - (absent*perDay) - (half*perDay/2);
+  }
+  const outstanding = labourAdvanceOutstanding(w.id);
+  return Math.max(0, gross - outstanding);
+}
+function openLabourAdvanceForm(editId){
+  if(!DATA.labourWorkers.length){ toast('Pehle worker add karein'); return; }
+  const editItem = editId ? DATA.labourAdvances.find(x=>x.id===editId) : null;
+  const fields = [
+    {key:'workerId', label:'Worker', type:'select', options: DATA.labourWorkers.map(w=>w.name), required:true},
+    {key:'amount', label:'Advance Amount (Rs)', type:'number', required:true},
+    {key:'date', label:'Date', type:'date'},
+    {key:'note', label:'Reason / Note', type:'text'},
+  ];
+  openSheet(`${sheetHeader((editItem?'Edit ':'Give ')+'Advance')}
+    <form id="laForm">${fields.map(f=>renderField(f, editItem? (f.key==='workerId'? (DATA.labourWorkers.find(w=>w.id===editItem.workerId)||{}).name : editItem[f.key]) : (f.key==='date'?todayISO():''))).join('')}
+      <div style="display:flex;gap:10px">
+        ${editItem?`<button type="button" class="btn btn-danger" id="delLA">${ICN.trash}</button>`:''}
+        <button type="submit" class="btn btn-primary btn-block">${editItem?'Update':'Save Advance'}</button>
+      </div></form>`, (root)=>{
+      $('#laForm', root).addEventListener('submit', e=>{
+        e.preventDefault();
+        const vals = readForm(e.target, fields);
+        const w = DATA.labourWorkers.find(x=>x.name===vals.workerId);
+        vals.workerId = w ? w.id : null;
+        if(editItem) Object.assign(editItem, vals);
+        else DATA.labourAdvances.push({id:uid(), settled:false, ...vals});
+        saveData(); closeSheet(); toast('Advance saved'); renderRoute();
+      });
+      if(editItem) $('#delLA', root).addEventListener('click', ()=>{
+        DATA.labourAdvances = DATA.labourAdvances.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute();
+      });
+    });
+}
+function openLabourPaymentForm(editId){
+  if(!DATA.labourWorkers.length){ toast('Pehle worker add karein'); return; }
+  const editItem = editId ? DATA.labourPayments.find(x=>x.id===editId) : null;
+  let html = `${sheetHeader((editItem?'Edit ':'Record ')+'Payment')}
+    <form id="lpForm">
+      <div class="field"><label>Worker *</label><select name="workerId" required id="lwSel">
+        ${DATA.labourWorkers.map(w=>`<option value="${w.id}" ${editItem&&editItem.workerId===w.id?'selected':''}>${escapeHtml(w.name)} (${w.wageType})</option>`).join('')}
+      </select></div>
+      <div class="field-row">
+        <div class="field"><label>Period</label><input type="text" name="period" placeholder="e.g. 2026-07 or 21-27 Jul" value="${editItem?editItem.period:monthKey()}"></div>
+        <div class="field"><label>Gross Amount (Rs)</label><input type="number" name="gross" id="grossIn" value="${editItem?editItem.gross:''}"></div>
+      </div>
+      <div class="field"><label>Advance Deducted (Rs)</label><input type="number" name="advanceDeduction" id="lpAdvIn" value="${editItem?editItem.advanceDeduction||0:0}"></div>
+      <div class="card" style="background:var(--surface-2);box-shadow:none">
+        <div class="card-row" style="justify-content:space-between"><span style="font-size:12px">Net Payment</span><b id="lpNetOut" style="font-size:16px">Rs 0</b></div>
+      </div>
+      <div class="field" style="margin-top:12px"><label>Payment Status *</label><select name="status" required>
+        ${['Sent','Pending','Partial'].map(s=>`<option ${editItem&&editItem.status===s?'selected':''}>${s}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Payment Date</label><input type="date" name="paymentDate" value="${editItem?editItem.paymentDate:todayISO()}"></div>
+      <div class="field"><label>Note</label><input type="text" name="note" value="${editItem?escapeHtml(editItem.note||''):''}"></div>
+      <div style="display:flex;gap:10px;margin-top:6px">
+        ${editItem?`<button type="button" class="btn btn-danger" id="delLP">${ICN.trash}</button>`:''}
+        <button type="submit" class="btn btn-primary btn-block">${editItem?'Update':'Save Payment'}</button>
+      </div>
+    </form>`;
+  openSheet(html, (root)=>{
+    const workerSel = $('#lwSel', root);
+    function prefill(){
+      const w = DATA.labourWorkers.find(x=>x.id===workerSel.value);
+      if(w && !editItem){
+        $('#grossIn', root).value = w.wageType==='Monthly' ? w.wageRate : Math.round(labourEstimatedDue(w) + labourAdvanceOutstanding(w.id));
+        $('#lpAdvIn', root).value = labourAdvanceOutstanding(w.id);
+      }
+      recalc();
+    }
+    function recalc(){
+      const gross = Number($('#grossIn', root).value)||0;
+      const advD = Number($('#lpAdvIn', root).value)||0;
+      $('#lpNetOut', root).textContent = fmtMoney(gross-advD);
+    }
+    workerSel.addEventListener('change', prefill);
+    $$('#grossIn,#lpAdvIn', root).forEach(el=>el.addEventListener('input', recalc));
+    prefill();
+    $('#lpForm', root).addEventListener('submit', e=>{
+      e.preventDefault();
+      const f = e.target;
+      const vals = {
+        workerId:f.workerId.value, period:f.period.value, gross:Number(f.gross.value)||0,
+        advanceDeduction:Number(f.advanceDeduction.value)||0, status:f.status.value,
+        paymentDate:f.paymentDate.value, note:f.note.value,
+      };
+      vals.net = vals.gross - vals.advanceDeduction;
+      if(editItem) Object.assign(editItem, vals);
+      else DATA.labourPayments.push({id:uid(), ...vals});
+      if(vals.advanceDeduction>0){
+        DATA.labourAdvances.filter(a=>a.workerId===vals.workerId && !a.settled).forEach(a=>a.settled=true);
+      }
+      saveData(); closeSheet(); toast('Payment saved'); renderRoute();
+    });
+    if(editItem) $('#delLP', root).addEventListener('click', ()=>{
+      if(confirm('Delete this payment record?')){ DATA.labourPayments = DATA.labourPayments.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute(); }
+    });
+  });
+}
+function generateLabourSlip(paymentId){
+  const p = DATA.labourPayments.find(x=>x.id===paymentId);
+  const w = DATA.labourWorkers.find(x=>x.id===p.workerId);
+  const receiptHtml = `<div style="font-family:Arial,sans-serif;padding:6px">
+    <div style="text-align:center;margin-bottom:14px">
+      <div style="font-size:20px;font-weight:800;color:#c2410c">GharSaz 360</div>
+      <div style="font-size:12px;color:#666">Labour Payment Slip</div>
+    </div>
+    <table style="width:100%;font-size:13px;border-collapse:collapse">
+      <tr><td style="padding:5px 0;color:#666">Worker</td><td style="text-align:right;font-weight:700">${escapeHtml(w?w.name:'—')}</td></tr>
+      <tr><td style="padding:5px 0;color:#666">Role</td><td style="text-align:right">${escapeHtml(w?w.role:'—')} (${w?w.wageType:''})</td></tr>
+      <tr><td style="padding:5px 0;color:#666">Period</td><td style="text-align:right">${escapeHtml(p.period)}</td></tr>
+      <tr><td style="padding:5px 0;color:#666">Gross Amount</td><td style="text-align:right">${fmtMoney(p.gross)}</td></tr>
+      ${p.advanceDeduction?`<tr><td style="padding:5px 0;color:#666">Advance Deducted</td><td style="text-align:right">-${fmtMoney(p.advanceDeduction)}</td></tr>`:''}
+      <tr><td style="padding:8px 0;font-weight:800;border-top:1px solid #ddd">Net Payment</td><td style="text-align:right;font-weight:800;border-top:1px solid #ddd">${fmtMoney(p.net)}</td></tr>
+      <tr><td style="padding:5px 0;color:#666">Status</td><td style="text-align:right">${p.status}</td></tr>
+      <tr><td style="padding:5px 0;color:#666">Date</td><td style="text-align:right">${fmtDate(p.paymentDate)}</td></tr>
+    </table>
+    <div style="text-align:center;margin-top:16px;font-size:11px;color:#999">Generated by GharSaz 360 · 100% Offline App</div>
+  </div>`;
+  openSheet(`${sheetHeader('Labour Payment Slip')}
+    <div class="card" style="box-shadow:none">${receiptHtml}</div>
+    <div style="display:flex;gap:10px;margin-top:10px">
+      <button class="btn btn-outline btn-block" id="waLSlip">Share on WhatsApp</button>
+      <button class="btn btn-primary btn-block" id="dlLSlip">${ICN.down} Download</button>
+    </div>`, (root)=>{
+      $('#dlLSlip', root).addEventListener('click', ()=>{
+        const text = `GharSaz 360 - Labour Payment Slip\nWorker: ${w?w.name:''}\nPeriod: ${p.period}\nNet Payment: ${fmtMoney(p.net)}\nStatus: ${p.status}\nDate: ${fmtDate(p.paymentDate)}`;
+        downloadFile(`Labour-Slip-${w?w.name:'worker'}-${p.period}.txt`, text, 'text/plain');
+      });
+      $('#waLSlip', root).addEventListener('click', ()=>{
+        const text = encodeURIComponent(`GharSaz 360 Labour Payment Slip\nWorker: ${w?w.name:''}\nPeriod: ${p.period}\nNet Payment: ${fmtMoney(p.net)}\nStatus: ${p.status}`);
+        window.open(`https://wa.me/${(w&&w.phone)?w.phone.replace(/\D/g,''):''}?text=${text}`, '_blank');
+      });
+    });
+}
+function renderLabour(){
+  if(!DATA.labourWorkers.length){
+    $('#viewRoot').innerHTML = emptyState('hardhat','Koi labour worker register nahi','Daily ya monthly wage worker add karein', 'labour-picker');
+    return;
+  }
+  const activeWorkers = DATA.labourWorkers.filter(w=>w.status!=='Inactive');
+  const totalDue = activeWorkers.reduce((s,w)=>s+labourEstimatedDue(w),0);
+  const pendingPayments = DATA.labourPayments.filter(p=>p.status!=='Sent').length;
+
+  let html = `<div class="grid-2">
+    <div class="stat-card" style="background:linear-gradient(135deg,#9a3412,#f97316)"><div class="stat-label">Estimated Dues (this month)</div><div class="stat-value">${fmtMoney(totalDue)}</div></div>
+    <div class="stat-card ${pendingPayments?'danger':''}"><div class="stat-label">Payments Pending</div><div class="stat-value">${pendingPayments}</div></div>
+  </div>`;
+
+  html += `<div class="section-title">Workers &amp; Attendance</div><div class="card">` +
+    DATA.labourWorkers.map(w=>{
+      const due = labourEstimatedDue(w);
+      const outstanding = labourAdvanceOutstanding(w.id);
+      return `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
+        <div class="card-row" style="justify-content:space-between">
+          <div class="card-row" onclick="openLabourWorkerForm('${w.id}')" style="cursor:pointer">
+            <div class="avatar" style="background:#ffedd5;color:#c2410c;width:36px;height:36px;border-radius:11px">${icon('hardhat')}</div>
+            <div><div style="font-weight:700;font-size:13px">${escapeHtml(w.name)}</div><div class="card-sub">${escapeHtml(w.role||'')} · ${w.wageType} · ${fmtMoney(w.wageRate)}${w.wageType==='Daily'?'/day':'/mo'} ${w.status==='Inactive'?'· Inactive':''}</div></div>
+          </div>
+          <div style="text-align:right"><div class="card-sub">Est. Due</div><div style="font-weight:800">${fmtMoney(due)}</div>
+            ${outstanding?`<div class="card-sub" style="color:#dc2626">Advance: ${fmtMoney(outstanding)}</div>`:''}
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <button class="btn btn-sm btn-ghost" onclick="markLabourAttendance('${w.id}','Present')">Present</button>
+          <button class="btn btn-sm btn-ghost" onclick="markLabourAttendance('${w.id}','Half-Day')">Half-Day</button>
+          <button class="btn btn-sm btn-ghost" onclick="markLabourAttendance('${w.id}','Absent')">Absent</button>
+          <button class="btn btn-sm btn-outline" onclick="openLabourAdvanceForm(null)">+ Advance</button>
+        </div>
+      </div>`;
+    }).join('') + `</div>`;
+
+  html += `<div class="section-title">Advances</div>`;
+  const advs = DATA.labourAdvances.slice().reverse();
+  html += advs.length ? `<div class="card">` + advs.slice(0,10).map(a=>{
+    const w = DATA.labourWorkers.find(x=>x.id===a.workerId);
+    return `<div class="list-item" onclick="openLabourAdvanceForm('${a.id}')">
+      <div class="avatar" style="background:#fee2e2;color:#991b1b">${icon('wallet')}</div>
+      <div class="meta"><div class="t">${escapeHtml(w?w.name:'—')}</div><div class="s">${fmtDate(a.date)} ${a.settled?'· Settled':'· Outstanding'}</div></div>
+      <div class="amt">${fmtMoney(a.amount)}</div>
+    </div>`;
+  }).join('') + `</div>` : emptyState('wallet','Koi advance record nahi','');
+
+  html += `<div class="section-title">Payments — Sent / Pending</div>`;
+  const pays = DATA.labourPayments.slice().reverse();
+  html += pays.length ? `<div class="card">` + pays.slice(0,12).map(p=>{
+    const w = DATA.labourWorkers.find(x=>x.id===p.workerId);
+    const level = p.status==='Sent'?'green':p.status==='Partial'?'amber':'red';
+    return `<div class="list-item">
+      <div class="avatar" style="background:#ffedd5;color:#c2410c">${icon('hardhat')}</div>
+      <div class="meta" onclick="openLabourPaymentForm('${p.id}')"><div class="t">${escapeHtml(w?w.name:'—')} · ${escapeHtml(p.period)}</div><div class="s">${fmtMoney(p.net)}</div></div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+        <span class="badge ${level}">${p.status}</span>
+        <button class="btn btn-sm btn-outline" onclick="generateLabourSlip('${p.id}')">${ICN.print} Slip</button>
+      </div>
+    </div>`;
+  }).join('') + `</div>` : emptyState('hardhat','Koi payment record nahi','');
+
+  $('#viewRoot').innerHTML = html;
+}
+
+/* ---------------------------------------------------------------------- *
+ * 13D. SHARED DATE HELPERS  (used by Bills, Loans, Subscriptions,
+ *      Insurance, Family birthdays, Important Dates, To-Do)
+ * ---------------------------------------------------------------------- */
+function dueBadge(dateStr, warnDays){
+  warnDays = warnDays||7;
+  const d = daysUntil(dateStr);
+  if(d===null) return '';
+  if(d<0) return `<span class="badge red">Overdue ${Math.abs(d)}d</span>`;
+  if(d===0) return `<span class="badge red">Due Today</span>`;
+  if(d<=warnDays) return `<span class="badge amber">${d}d left</span>`;
+  return `<span class="badge green">${d}d left</span>`;
+}
+function nextYearlyOccurrence(dateStr){
+  if(!dateStr) return null;
+  const now = new Date(); now.setHours(0,0,0,0);
+  const d = new Date(dateStr);
+  if(isNaN(d)) return null;
+  let next = new Date(now.getFullYear(), d.getMonth(), d.getDate());
+  if(next < now) next = new Date(now.getFullYear()+1, d.getMonth(), d.getDate());
+  return next.toISOString().slice(0,10);
+}
+function ageFromDob(dateStr){
+  if(!dateStr) return null;
+  const d = new Date(dateStr); if(isNaN(d)) return null;
+  const now = new Date();
+  let age = now.getFullYear()-d.getFullYear();
+  const m = now.getMonth()-d.getMonth();
+  if(m<0 || (m===0 && now.getDate()<d.getDate())) age--;
+  return age;
+}
+
+/* ---------------------------------------------------------------------- *
+ * 13E. TO-DO / DAILY TASKS
+ * ---------------------------------------------------------------------- */
+function toggleTodoStatus(id){
+  const t = DATA.todos.find(x=>x.id===id);
+  t.status = t.status==='Done' ? 'Pending' : 'Done';
+  saveData(); renderRoute();
+}
+function renderTodos(){
+  if(!DATA.todos.length){ $('#viewRoot').innerHTML = emptyState('checksquare','Koi task nahi','Naya task add karein','todos'); return; }
+  const pending = DATA.todos.filter(t=>t.status!=='Done').sort((a,b)=>(a.dueDate||'9999').localeCompare(b.dueDate||'9999'));
+  const done = DATA.todos.filter(t=>t.status==='Done');
+  let html = `<div class="stat-card" style="background:linear-gradient(135deg,#0e7490,#22d3ee)"><div class="stat-label">Pending Tasks</div><div class="stat-value">${pending.length}</div></div>`;
+  html += `<div class="section-title">All Tasks</div><div class="card">` + pending.concat(done).map(t=>{
+    const pr = {Low:'green',Medium:'amber',High:'red'}[t.priority]||'';
+    const isDone = t.status==='Done';
+    return `<div class="list-item">
+      <div class="avatar" style="background:${isDone?'#d1fae5':'#e0f2fe'};color:${isDone?'#065f46':'#0369a1'};cursor:pointer" onclick="toggleTodoStatus('${t.id}')">${isDone?icon('check'):''}</div>
+      <div class="meta" onclick="openGenericForm('todos','${t.id}')" style="cursor:pointer;${isDone?'opacity:.55;text-decoration:line-through':''}"><div class="t">${escapeHtml(t.title)}</div><div class="s">${escapeHtml(t.category||'')} ${t.dueDate?'· '+fmtDate(t.dueDate):''}</div></div>
+      ${isDone?'<span class="badge green">Done</span>':(t.priority?`<span class="badge ${pr}">${t.priority}</span>`:'')}
+    </div>`;
+  }).join('') + `</div>`;
+  $('#viewRoot').innerHTML = html;
+}
+
+/* ---------------------------------------------------------------------- *
+ * 13F. BILL REMINDERS
+ * ---------------------------------------------------------------------- */
+function toggleBillPaid(id){
+  const b = DATA.bills.find(x=>x.id===id);
+  if(b.status==='Paid'){
+    b.status = 'Unpaid';
+  } else {
+    b.status = 'Paid';
+    if(b.recurring==='Monthly'){
+      const d = new Date(b.dueDate||todayISO()); d.setMonth(d.getMonth()+1);
+      b.dueDate = d.toISOString().slice(0,10); b.status='Unpaid';
+    } else if(b.recurring==='Yearly'){
+      const d = new Date(b.dueDate||todayISO()); d.setFullYear(d.getFullYear()+1);
+      b.dueDate = d.toISOString().slice(0,10); b.status='Unpaid';
+    }
+  }
+  saveData(); toast('Bill updated'); renderRoute();
+}
+function renderBills(){
+  if(!DATA.bills.length){ $('#viewRoot').innerHTML = emptyState('bell','Koi bill nahi','Utility bill add karein','bills'); return; }
+  const unpaid = DATA.bills.filter(b=>b.status!=='Paid');
+  const totalDue = unpaid.reduce((s,b)=>s+Number(b.amount||0),0);
+  let html = `<div class="stat-card danger"><div class="stat-label">Unpaid Bills Total</div><div class="stat-value">${fmtMoney(totalDue)}</div></div>`;
+  const sorted = DATA.bills.slice().sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||''));
+  html += `<div class="section-title">All Bills</div><div class="card">` + sorted.map(b=>`
+    <div class="list-item">
+      <div class="avatar" style="background:#fef3c7;color:#b45309">${icon('bell')}</div>
+      <div class="meta" onclick="openGenericForm('bills','${b.id}')" style="cursor:pointer"><div class="t">${escapeHtml(b.name)}</div><div class="s">${fmtMoney(b.amount)} · ${fmtDate(b.dueDate)}</div></div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+        ${b.status==='Paid'?'<span class="badge green">Paid</span>':dueBadge(b.dueDate,5)}
+        <button class="btn btn-sm btn-outline" onclick="toggleBillPaid('${b.id}')">${b.status==='Paid'?'Mark Unpaid':'Mark Paid'}</button>
+      </div>
+    </div>`).join('') + `</div>`;
+  $('#viewRoot').innerHTML = html;
+}
+
+/* ---------------------------------------------------------------------- *
+ * 13G. FAMILY MEMBERS PROFILE
+ * ---------------------------------------------------------------------- */
+function renderFamily(){
+  if(!DATA.familyMembers.length){ $('#viewRoot').innerHTML = emptyState('users','Koi family member nahi','Family member add karein','familyMembers'); return; }
+  let html = `<div class="card">` + DATA.familyMembers.map(m=>{
+    const age = ageFromDob(m.dob);
+    const nextBday = nextYearlyOccurrence(m.dob);
+    const d = nextBday ? daysUntil(nextBday) : null;
+    return `<div class="list-item" onclick="openGenericForm('familyMembers','${m.id}')">
+      <div class="avatar" style="background:#fce7f3;color:#db2777">${icon('users')}</div>
+      <div class="meta"><div class="t">${escapeHtml(m.name)}</div><div class="s">${escapeHtml(m.relation||'')} ${age!==null?'· '+age+' yrs':''} ${m.bloodGroup&&m.bloodGroup!=='Unknown'?'· '+m.bloodGroup:''}</div></div>
+      ${d!==null && d<=30?`<span class="badge amber">🎂 ${d}d</span>`:''}
+    </div>`;
+  }).join('') + `</div>`;
+  $('#viewRoot').innerHTML = html;
+}
+
+/* ---------------------------------------------------------------------- *
+ * 13H. LOAN / EMI TRACKER
+ * ---------------------------------------------------------------------- */
+function markEMIPaid(loanId){
+  const l = DATA.loans.find(x=>x.id===loanId);
+  const remaining = l.remaining!==undefined ? l.remaining : Number(l.principal||0);
+  l.remaining = Math.max(0, remaining - Number(l.monthlyEMI||0));
+  DATA.loanPayments.push({id:uid(), loanId, amount:l.monthlyEMI, date:todayISO()});
+  const d = new Date(l.nextDueDate||todayISO()); d.setMonth(d.getMonth()+1);
+  l.nextDueDate = d.toISOString().slice(0,10);
+  saveData(); toast('EMI payment recorded'); renderRoute();
+}
+function renderLoans(){
+  if(!DATA.loans.length){ $('#viewRoot').innerHTML = emptyState('bank','Koi loan nahi','Loan/EMI add karein','loans'); return; }
+  const totalRemaining = DATA.loans.reduce((s,l)=>s+Number(l.remaining!==undefined?l.remaining:l.principal||0),0);
+  let html = `<div class="stat-card danger"><div class="stat-label">Total Remaining</div><div class="stat-value">${fmtMoney(totalRemaining)}</div></div>`;
+  html += `<div class="section-title">Loans</div><div class="card">` + DATA.loans.map(l=>{
+    const remaining = l.remaining!==undefined ? l.remaining : l.principal;
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
+      <div class="card-row" style="justify-content:space-between">
+        <div onclick="openGenericForm('loans','${l.id}')" style="cursor:pointer"><div style="font-weight:700;font-size:13px">${escapeHtml(l.name)}</div><div class="card-sub">${escapeHtml(l.lender||'')} · EMI ${fmtMoney(l.monthlyEMI)}</div></div>
+        <div style="text-align:right">${dueBadge(l.nextDueDate,7)}<div class="card-sub" style="margin-top:4px">Remaining: ${fmtMoney(remaining)}</div></div>
+      </div>
+      <button class="btn btn-sm btn-primary" style="margin-top:8px" onclick="markEMIPaid('${l.id}')">Mark EMI Paid</button>
+    </div>`;
+  }).join('') + `</div>`;
+  $('#viewRoot').innerHTML = html;
+}
+
+/* ---------------------------------------------------------------------- *
+ * 13I. SUBSCRIPTION TRACKER
+ * ---------------------------------------------------------------------- */
+function renderSubscriptions(){
+  if(!DATA.subscriptions.length){ $('#viewRoot').innerHTML = emptyState('repeat','Koi subscription nahi','Subscription add karein','subscriptions'); return; }
+  const active = DATA.subscriptions.filter(s=>s.status!=='Cancelled');
+  const monthlyTotal = active.reduce((s,x)=>s+Number(x.amount||0)/(x.billingCycle==='Yearly'?12:1),0);
+  let html = `<div class="stat-card" style="background:linear-gradient(135deg,#6d28d9,#a78bfa)"><div class="stat-label">Est. Monthly Cost</div><div class="stat-value">${fmtMoney(monthlyTotal)}</div></div>`;
+  html += `<div class="section-title">Subscriptions</div><div class="card">` + DATA.subscriptions.map(s=>`
+    <div class="list-item" onclick="openGenericForm('subscriptions','${s.id}')">
+      <div class="avatar" style="background:#ede9fe;color:#7c3aed">${icon('repeat')}</div>
+      <div class="meta"><div class="t">${escapeHtml(s.name)}</div><div class="s">${escapeHtml(s.category||'')} · ${fmtMoney(s.amount)}/${s.billingCycle==='Yearly'?'yr':'mo'}</div></div>
+      ${s.status==='Cancelled'?'<span class="badge red">Cancelled</span>':dueBadge(s.nextRenewalDate,7)}
+    </div>`).join('') + `</div>`;
+  $('#viewRoot').innerHTML = html;
+}
+
+/* ---------------------------------------------------------------------- *
+ * 13J. INSURANCE POLICY TRACKER
+ * ---------------------------------------------------------------------- */
+function renderInsurance(){
+  if(!DATA.insurancePolicies.length){ $('#viewRoot').innerHTML = emptyState('umbrella','Koi policy nahi','Insurance policy add karein','insurancePolicies'); return; }
+  let html = `<div class="card">` + DATA.insurancePolicies.map(p=>`
+    <div class="list-item" onclick="openGenericForm('insurancePolicies','${p.id}')">
+      <div class="avatar" style="background:#e0f2fe;color:#0369a1">${icon('umbrella')}</div>
+      <div class="meta"><div class="t">${escapeHtml(p.type)} — ${escapeHtml(p.provider||'')}</div><div class="s">Premium ${fmtMoney(p.premiumAmount)}/${p.premiumCycle==='Yearly'?'yr':'mo'} ${p.policyNumber?'· #'+escapeHtml(p.policyNumber):''}</div></div>
+      ${dueBadge(p.expiryDate,30)}
+    </div>`).join('') + `</div>`;
+  $('#viewRoot').innerHTML = html;
+}
+
+/* ---------------------------------------------------------------------- *
+ * 13K. HEALTH RECORDS
+ * ---------------------------------------------------------------------- */
+function renderHealth(){
+  if(!DATA.healthRecords.length){ $('#viewRoot').innerHTML = emptyState('heartpulse','Koi health record nahi','Prescription/appointment add karein','healthRecords'); return; }
+  const sorted = DATA.healthRecords.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  let html = `<div class="card">` + sorted.map(r=>`
+    <div class="list-item" onclick="openGenericForm('healthRecords','${r.id}')">
+      <div class="avatar" style="background:#fee2e2;color:#dc2626">${icon('heartpulse')}</div>
+      <div class="meta"><div class="t">${escapeHtml(r.memberName||'')} · ${escapeHtml(r.recordType||'')}</div><div class="s">${escapeHtml(r.doctor||'')} · ${fmtDate(r.date)}</div></div>
+      ${r.nextAppointment?dueBadge(r.nextAppointment,7):''}
+    </div>`).join('') + `</div>`;
+  $('#viewRoot').innerHTML = html;
+}
+
+/* ---------------------------------------------------------------------- *
+ * 13L. IMPORTANT DATES & ANNIVERSARY REMINDERS
+ * ---------------------------------------------------------------------- */
+function renderImportantDates(){
+  if(!DATA.importantDates.length){ $('#viewRoot').innerHTML = emptyState('gift','Koi important date nahi','Birthday/anniversary add karein','importantDates'); return; }
+  const withNext = DATA.importantDates.map(e=>({...e, _next: nextYearlyOccurrence(e.date)}));
+  withNext.sort((a,b)=>(a._next||'').localeCompare(b._next||''));
+  let html = `<div class="card">` + withNext.map(e=>`
+    <div class="list-item" onclick="openGenericForm('importantDates','${e.id}')">
+      <div class="avatar" style="background:#fce7f3;color:#be185d">${icon('gift')}</div>
+      <div class="meta"><div class="t">${escapeHtml(e.title)}</div><div class="s">${escapeHtml(e.type||'')} · ${fmtDate(e.date)}</div></div>
+      ${dueBadge(e._next,14)}
+    </div>`).join('') + `</div>`;
+  $('#viewRoot').innerHTML = html;
+}
+
+/* ---------------------------------------------------------------------- *
  * 14. ASSETS & WARRANTY / MAINTENANCE SCHEDULER
  * ---------------------------------------------------------------------- */
 function renderAssets(){
@@ -2100,6 +2742,11 @@ const ROUTE_RENDERERS = {
   udhar: renderUdhar,
   construction: renderConstruction,
   salary: renderSalary,
+  labour: renderLabour,
+  todos: renderTodos, bills: renderBills, familyMembers: renderFamily,
+  loans: renderLoans, subscriptions: renderSubscriptions,
+  insurancePolicies: renderInsurance, healthRecords: renderHealth,
+  importantDates: renderImportantDates,
   assets: renderAssets,
   maintenance: renderMaintenance,
   vehicle: renderVehicle,
@@ -2113,11 +2760,29 @@ const ROUTE_RENDERERS = {
   more: ()=>{ $('#viewRoot').innerHTML = moreGrid(); },
 };
 function renderRoute(){
+  const knownRoutes = Object.keys(ROUTE_RENDERERS);
+  if(!knownRoutes.includes(ROUTE)){
+    renderTopbarSafe();
+    renderBottomNav();
+    $('#fabAdd').style.display = 'none';
+    renderNotFound();
+    return;
+  }
   renderTopbar();
   renderBottomNav();
   renderFab();
   const fn = ROUTE_RENDERERS[ROUTE] || renderDashboard;
-  fn();
+  try{
+    fn();
+  }catch(e){
+    console.error('Render error on route', ROUTE, e);
+    showErrorScreen('Ye Page Load Nahi Ho Saka', 'Is section ko dikhane mein masla aa raha hai. "Reload App" dabayen ya Home par wapis jayen.');
+  }
+}
+function renderTopbarSafe(){
+  $('#pageTitle').textContent = 'Page Not Found';
+  $('#pageSub').textContent = '';
+  $('#pdfBtn').style.display = 'none';
 }
 
 /* ---------------------------------------------------------------------- *
@@ -2143,22 +2808,31 @@ function initTopbarButtons(){
   $('#fabWa').addEventListener('click', openWhatsAppSupport);
 }
 function initApp(){
-  initTheme();
-  initTopbarButtons();
-  const initialRoute = location.hash.replace('#','');
-  ROUTE = ALL_MODULES.some(m=>m.id===initialRoute) ? initialRoute : 'dashboard';
-  renderRoute();
-  $('#app').classList.add('ready');
+  try{
+    initTheme();
+    initTopbarButtons();
+    const initialRoute = location.hash.replace('#','');
+    ROUTE = ALL_MODULES.some(m=>m.id===initialRoute) ? initialRoute : 'dashboard';
+    renderRoute();
+    $('#app').classList.add('ready');
 
-  setTimeout(()=>{
+    setTimeout(()=>{
+      $('#splash').classList.add('hide');
+      setTimeout(()=>$('#splash').remove(), 700);
+    }, 3000);
+  }catch(e){
+    console.error('App failed to start:', e);
     $('#splash').classList.add('hide');
-    setTimeout(()=>$('#splash').remove(), 700);
-  }, 3000);
+    $('#app').classList.add('ready');
+    showErrorScreen('App Start Nahi Ho Saki', 'Kuch technical masla aa gaya hai. Browser ko update karein ya doosra browser (Chrome recommended) try karein.');
+  }
 }
 document.addEventListener('DOMContentLoaded', initApp);
 
-/* Register service worker for offline caching (GitHub Pages / TWA ready) */
-if('serviceWorker' in navigator){
+/* Register service worker for offline caching (GitHub Pages / TWA ready).
+   Skipped automatically on file:// (standalone single-file usage) since
+   service workers cannot run outside http/https origins. */
+if('serviceWorker' in navigator && (location.protocol==='https:' || location.protocol==='http:')){
   window.addEventListener('load', ()=>{
     navigator.serviceWorker.register('sw.js').catch(err=>console.warn('SW registration failed:', err));
   });
@@ -2216,6 +2890,61 @@ function getPrintData(route){
           DATA.udharTx.slice().reverse().map(t=>{
             const u = DATA.udhars.find(x=>x.id===t.udharId);
             return [u?u.name:'', t.type, fmtMoney(t.amount), fmtDate(t.date), t.status];
+          })),
+      ]};
+    case 'todos':
+      return { title:'To-Do / Task Report', sections: [
+        pdfSection('Tasks', ['Title','Category','Due Date','Priority','Status'],
+          DATA.todos.map(t=>[t.title,t.category||'',fmtDate(t.dueDate),t.priority||'',t.status||''])),
+      ]};
+    case 'bills':
+      return { title:'Bill Reminders Report', sections: [
+        pdfSection('Bills', ['Name','Amount','Due Date','Recurring','Status'],
+          DATA.bills.map(b=>[b.name,fmtMoney(b.amount),fmtDate(b.dueDate),b.recurring||'',b.status||''])),
+      ]};
+    case 'familyMembers':
+      return { title:'Family Members', sections: [
+        pdfSection('Members', ['Name','Relation','DOB','Blood Group','CNIC','Phone'],
+          DATA.familyMembers.map(m=>[m.name,m.relation||'',fmtDate(m.dob),m.bloodGroup||'',m.cnic||'',m.phone||''])),
+      ]};
+    case 'loans':
+      return { title:'Loan / EMI Report', sections: [
+        pdfSection('Loans', ['Name','Lender','Principal','Monthly EMI','Remaining','Next Due'],
+          DATA.loans.map(l=>[l.name,l.lender||'',fmtMoney(l.principal),fmtMoney(l.monthlyEMI),fmtMoney(l.remaining!==undefined?l.remaining:l.principal),fmtDate(l.nextDueDate)])),
+      ]};
+    case 'subscriptions':
+      return { title:'Subscriptions Report', sections: [
+        pdfSection('Subscriptions', ['Name','Category','Amount','Cycle','Next Renewal','Status'],
+          DATA.subscriptions.map(s=>[s.name,s.category||'',fmtMoney(s.amount),s.billingCycle||'',fmtDate(s.nextRenewalDate),s.status||''])),
+      ]};
+    case 'insurancePolicies':
+      return { title:'Insurance Policies Report', sections: [
+        pdfSection('Policies', ['Type','Provider','Policy #','Premium','Coverage','Expiry'],
+          DATA.insurancePolicies.map(p=>[p.type,p.provider||'',p.policyNumber||'',fmtMoney(p.premiumAmount),fmtMoney(p.coverageAmount),fmtDate(p.expiryDate)])),
+      ]};
+    case 'healthRecords':
+      return { title:'Health Records Report', sections: [
+        pdfSection('Records', ['Member','Type','Doctor','Date','Next Appointment'],
+          DATA.healthRecords.map(r=>[r.memberName||'',r.recordType||'',r.doctor||'',fmtDate(r.date),fmtDate(r.nextAppointment)])),
+      ]};
+    case 'importantDates':
+      return { title:'Important Dates Report', sections: [
+        pdfSection('Dates', ['Title','Type','Date','Notes'],
+          DATA.importantDates.map(e=>[e.title,e.type||'',fmtDate(e.date),e.notes||''])),
+      ]};
+    case 'labour':
+      return { title:'Labour Management Report', sections: [
+        pdfSection('Workers', ['Name','Role','Wage Type','Rate','Status'],
+          DATA.labourWorkers.map(w=>[w.name,w.role||'',w.wageType,fmtMoney(w.wageRate),w.status||''])),
+        pdfSection('Advances', ['Worker','Amount','Date','Settled'],
+          DATA.labourAdvances.slice().reverse().map(a=>{
+            const w = DATA.labourWorkers.find(x=>x.id===a.workerId);
+            return [w?w.name:'', fmtMoney(a.amount), fmtDate(a.date), a.settled?'Yes':'No'];
+          })),
+        pdfSection('Payments', ['Worker','Period','Gross','Advance Deducted','Net','Status'],
+          DATA.labourPayments.slice().reverse().map(p=>{
+            const w = DATA.labourWorkers.find(x=>x.id===p.workerId);
+            return [w?w.name:'', p.period, fmtMoney(p.gross), fmtMoney(p.advanceDeduction), fmtMoney(p.net), p.status];
           })),
       ]};
     case 'salary':
