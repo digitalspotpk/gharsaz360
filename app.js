@@ -46,6 +46,7 @@ const ICN = {
   droplet:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2s7 8 7 13a7 7 0 1 1-14 0c0-5 7-13 7-13Z"/></svg>`,
   bell:  `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>`,
   search:`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>`,
+  briefcase:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><path d="M2 13h20"/></svg>`,
 };
 function icon(name, color){ return `<span style="color:${color||'currentColor'};display:flex">${ICN[name]||''}</span>`; }
 
@@ -114,6 +115,7 @@ function defaultState(){
     vaultMeta: null, vaultItems: [], emergencyContacts: [],
     events: [], eventItems: [],
     goals: [], goalTx: [],
+    employees: [], staffAttendance: [], salaryAdvances: [], salaryPayments: [],
   };
 }
 let DATA = loadData();
@@ -167,6 +169,7 @@ const ALL_MODULES = [
   {id:'rent', label:'House Rent', icon:'key', color:'#0ea5e9'},
   {id:'udhar', label:'Udhar Khata', icon:'users', color:'#8b5cf6'},
   {id:'construction', label:'Construction', icon:'hammer', color:'#b45309'},
+  {id:'salary', label:'Salary Management', icon:'briefcase', color:'#4f46e5'},
   {id:'assets', label:'Assets & Warranty', icon:'box', color:'#0369a1'},
   {id:'maintenance', label:'Maintenance', icon:'wrench', color:'#475569'},
   {id:'vehicle', label:'Vehicle Log', icon:'car', color:'#dc2626'},
@@ -198,6 +201,7 @@ function renderTopbar(){
   const subs = {
     dashboard:'Aaj ka khulasa', budgets:'Estimated vs actual', expenses:'Sab kharchay ek jaga',
     rent:'Properties, tenants, receipts', udhar:'Udhar len-den ledger', construction:'Material & labour',
+    salary:'Staff, attendance & payroll',
     assets:'Warranty tracker', maintenance:'Servicing reminders', vehicle:'Fuel & mileage',
     zakat:'Calculator & charity', solar:'Generation & bill estimate', pantry:'Ration ka hisaab',
     vault:'Encrypted local vault', events:'Occasion budgets', goals:'Apke targets', settings:'Backup & preferences',
@@ -222,6 +226,7 @@ function renderFab(){
   const map = {
     budgets:'budgets', expenses:'expenses', rent:'rent-picker', udhar:'udhars',
     construction:'construction-picker', assets:'assets', maintenance:'maintenanceLogs',
+    salary:'salary-picker',
     vehicle:'vehicle-picker', zakat:'zakat-picker', solar:'solarLogs', pantry:'pantryItems',
     vault:'vault-picker', events:'events-picker', goals:'goals',
   };
@@ -379,6 +384,7 @@ function handleFab(route){
   const pickers = {
     'rent-picker': [['Add Property','properties'],['Add Tenant','tenants'],['Record Payment','rentPayments']],
     'construction-picker': [['New Project','constructionProjects'],['Add Material Expense','materials'],['Add Labourer','labourers']],
+    'salary-picker': [['Add Employee','employees'],['Give Advance/Loan','salaryAdvances'],['Record Salary Payment','salaryPayments']],
     'vehicle-picker': [['Add Vehicle','vehicles'],['Add Fuel Entry','fuelLogs']],
     'zakat-picker': [['Zakat Calculator','zakatCalc'],['Add Charity Record','charityRecords']],
     'vault-picker': [['Add Vault Item','vaultItems'],['Add Emergency Contact','emergencyContacts']],
@@ -414,6 +420,9 @@ function openGenericForm(arrayKey, editId){
   if(arrayKey==='emergencyContacts') return openEmergencyContactForm(editId);
   if(arrayKey==='eventItems') return openEventItemForm(editId);
   if(arrayKey==='goalTx') return openGoalTxForm(editId);
+  if(arrayKey==='employees') return openEmployeeForm(editId);
+  if(arrayKey==='salaryAdvances') return openSalaryAdvanceForm(editId);
+  if(arrayKey==='salaryPayments') return openSalaryPaymentForm(editId);
 
   const schema = SCHEMAS[arrayKey];
   if(!schema) return;
@@ -515,7 +524,7 @@ function renderDashboard(){
   }
 
   html += `<div class="section-title">Quick Access</div><div class="grid-4">`;
-  ['expenses','rent','udhar','zakat','vehicle','goals','vault','settings'].forEach(id=>{
+  ['expenses','rent','udhar','salary','zakat','vehicle','goals','vault','settings'].forEach(id=>{
     const m = ALL_MODULES.find(x=>x.id===id);
     html += moduleTile(m);
   });
@@ -1204,6 +1213,267 @@ function renderConstruction(){
 }
 
 /* ---------------------------------------------------------------------- *
+ * 13B. SALARY MANAGEMENT  (staff, attendance, advances, payroll, payslips)
+ * ---------------------------------------------------------------------- */
+function openEmployeeForm(editId){
+  const editItem = editId ? DATA.employees.find(x=>x.id===editId) : null;
+  const fields = [
+    {key:'name', label:'Employee Name', type:'text', required:true},
+    {key:'designation', label:'Designation', type:'select', options:['Domestic Help/Maid','Driver','Security Guard','Cook','Gardener','Office Staff','Manager','Other']},
+    {key:'phone', label:'Phone Number', type:'text'},
+    {key:'cnic', label:'CNIC / ID', type:'text'},
+    {key:'joiningDate', label:'Joining Date', type:'date'},
+    {key:'monthlySalary', label:'Monthly Salary (Rs)', type:'number', required:true},
+    {key:'status', label:'Status', type:'select', options:['Active','Inactive']},
+  ];
+  openSheet(`${sheetHeader((editItem?'Edit ':'Add ')+'Employee')}
+    <form id="empForm">${fields.map(f=>renderField(f, editItem?editItem[f.key]:(f.key==='joiningDate'?todayISO():(f.key==='status'?'Active':'')))).join('')}
+      <div style="display:flex;gap:10px">
+        ${editItem?`<button type="button" class="btn btn-danger" id="delEmp">${ICN.trash}</button>`:''}
+        <button type="submit" class="btn btn-primary btn-block">${editItem?'Update':'Save Employee'}</button>
+      </div></form>`, (root)=>{
+      $('#empForm', root).addEventListener('submit', e=>{
+        e.preventDefault();
+        const vals = readForm(e.target, fields);
+        if(editItem) Object.assign(editItem, vals);
+        else DATA.employees.push({id:uid(), ...vals});
+        saveData(); closeSheet(); toast('Employee saved'); renderRoute();
+      });
+      if(editItem) $('#delEmp', root).addEventListener('click', ()=>{
+        if(confirm('Delete this employee? Their attendance/advance/payment history will remain but unlinked.')){
+          DATA.employees = DATA.employees.filter(x=>x.id!==editId);
+          saveData(); closeSheet(); renderRoute();
+        }
+      });
+    });
+}
+function markStaffAttendance(employeeId, status){
+  DATA.staffAttendance.push({id:uid(), employeeId, date:todayISO(), status});
+  saveData(); toast('Attendance marked: '+status); renderRoute();
+}
+function staffAdvanceOutstanding(empId){
+  return DATA.salaryAdvances.filter(a=>a.employeeId===empId && !a.settled)
+    .reduce((s,a)=>s+Number(a.amount||0),0);
+}
+function staffMonthAttendance(empId, mKey){
+  return DATA.staffAttendance.filter(a=>a.employeeId===empId && monthKey(a.date)===mKey);
+}
+function staffEstimatedNetSalary(emp){
+  const mKey = monthKey();
+  const att = staffMonthAttendance(emp.id, mKey);
+  const perDay = Number(emp.monthlySalary||0)/30;
+  let gross = Number(emp.monthlySalary||0);
+  if(att.length){
+    const absent = att.filter(a=>a.status==='Absent').length;
+    const half = att.filter(a=>a.status==='Half-Day').length;
+    gross = gross - (absent*perDay) - (half*perDay/2);
+  }
+  const outstandingAdvance = staffAdvanceOutstanding(emp.id);
+  return Math.max(0, gross - outstandingAdvance);
+}
+function openSalaryAdvanceForm(editId){
+  if(!DATA.employees.length){ toast('Pehle employee add karein'); return; }
+  const editItem = editId ? DATA.salaryAdvances.find(x=>x.id===editId) : null;
+  const fields = [
+    {key:'employeeId', label:'Employee', type:'select', options: DATA.employees.map(e=>e.name), required:true},
+    {key:'amount', label:'Advance Amount (Rs)', type:'number', required:true},
+    {key:'date', label:'Date', type:'date'},
+    {key:'note', label:'Reason / Note', type:'text'},
+  ];
+  openSheet(`${sheetHeader((editItem?'Edit ':'Give ')+'Advance / Loan')}
+    <form id="advForm">${fields.map(f=>renderField(f, editItem? (f.key==='employeeId'? (DATA.employees.find(e=>e.id===editItem.employeeId)||{}).name : editItem[f.key]) : (f.key==='date'?todayISO():''))).join('')}
+      <div style="display:flex;gap:10px">
+        ${editItem?`<button type="button" class="btn btn-danger" id="delAdv">${ICN.trash}</button>`:''}
+        <button type="submit" class="btn btn-primary btn-block">${editItem?'Update':'Save Advance'}</button>
+      </div></form>`, (root)=>{
+      $('#advForm', root).addEventListener('submit', e=>{
+        e.preventDefault();
+        const vals = readForm(e.target, fields);
+        const emp = DATA.employees.find(x=>x.name===vals.employeeId);
+        vals.employeeId = emp ? emp.id : null;
+        if(editItem) Object.assign(editItem, vals);
+        else DATA.salaryAdvances.push({id:uid(), settled:false, ...vals});
+        saveData(); closeSheet(); toast('Advance saved'); renderRoute();
+      });
+      if(editItem) $('#delAdv', root).addEventListener('click', ()=>{
+        DATA.salaryAdvances = DATA.salaryAdvances.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute();
+      });
+    });
+}
+function openSalaryPaymentForm(editId){
+  if(!DATA.employees.length){ toast('Pehle employee add karein'); return; }
+  const editItem = editId ? DATA.salaryPayments.find(x=>x.id===editId) : null;
+  let html = `${sheetHeader((editItem?'Edit ':'Record ')+'Salary Payment')}
+    <form id="spForm">
+      <div class="field"><label>Employee *</label><select name="employeeId" required id="empSel">
+        ${DATA.employees.map(e=>`<option value="${e.id}" ${editItem&&editItem.employeeId===e.id?'selected':''}>${escapeHtml(e.name)}</option>`).join('')}
+      </select></div>
+      <div class="field-row">
+        <div class="field"><label>Month</label><input type="text" name="month" placeholder="2026-07" value="${editItem?editItem.month:monthKey()}"></div>
+        <div class="field"><label>Basic Salary (Rs)</label><input type="number" name="basic" id="basicIn" value="${editItem?editItem.basic:''}"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Bonus (Rs)</label><input type="number" name="bonus" id="bonusIn" value="${editItem?editItem.bonus||0:0}"></div>
+        <div class="field"><label>Absent Deduction (Rs)</label><input type="number" name="absentDeduction" id="absIn" value="${editItem?editItem.absentDeduction||0:0}"></div>
+      </div>
+      <div class="field"><label>Advance Deduction (Rs)</label><input type="number" name="advanceDeduction" id="advIn" value="${editItem?editItem.advanceDeduction||0:0}"></div>
+      <div class="card" style="background:var(--surface-2);box-shadow:none">
+        <div class="card-row" style="justify-content:space-between"><span style="font-size:12px">Net Payable</span><b id="netOut" style="font-size:16px">Rs 0</b></div>
+      </div>
+      <div class="field" style="margin-top:12px"><label>Status</label><select name="status">
+        ${['Paid','Pending','Partial'].map(s=>`<option ${editItem&&editItem.status===s?'selected':''}>${s}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Payment Date</label><input type="date" name="paymentDate" value="${editItem?editItem.paymentDate:todayISO()}"></div>
+      <div style="display:flex;gap:10px;margin-top:6px">
+        ${editItem?`<button type="button" class="btn btn-danger" id="delSP">${ICN.trash}</button>`:''}
+        <button type="submit" class="btn btn-primary btn-block">${editItem?'Update':'Save Payment'}</button>
+      </div>
+    </form>`;
+  openSheet(html, (root)=>{
+    const empSel = $('#empSel', root);
+    function prefillBasic(){
+      const emp = DATA.employees.find(x=>x.id===empSel.value);
+      if(emp && !editItem) $('#basicIn', root).value = emp.monthlySalary;
+      if(emp && !editItem) $('#advIn', root).value = staffAdvanceOutstanding(emp.id);
+      recalc();
+    }
+    function recalc(){
+      const basic = Number($('#basicIn', root).value)||0;
+      const bonus = Number($('#bonusIn', root).value)||0;
+      const absD = Number($('#absIn', root).value)||0;
+      const advD = Number($('#advIn', root).value)||0;
+      $('#netOut', root).textContent = fmtMoney(basic+bonus-absD-advD);
+    }
+    empSel.addEventListener('change', prefillBasic);
+    $$('#basicIn,#bonusIn,#absIn,#advIn', root).forEach(el=>el.addEventListener('input', recalc));
+    prefillBasic();
+    $('#spForm', root).addEventListener('submit', e=>{
+      e.preventDefault();
+      const f = e.target;
+      const vals = {
+        employeeId:f.employeeId.value, month:f.month.value,
+        basic:Number(f.basic.value)||0, bonus:Number(f.bonus.value)||0,
+        absentDeduction:Number(f.absentDeduction.value)||0, advanceDeduction:Number(f.advanceDeduction.value)||0,
+        status:f.status.value, paymentDate:f.paymentDate.value,
+      };
+      vals.net = vals.basic+vals.bonus-vals.absentDeduction-vals.advanceDeduction;
+      if(editItem) Object.assign(editItem, vals);
+      else DATA.salaryPayments.push({id:uid(), ...vals});
+      if(vals.advanceDeduction>0){
+        DATA.salaryAdvances.filter(a=>a.employeeId===vals.employeeId && !a.settled).forEach(a=>a.settled=true);
+      }
+      saveData(); closeSheet(); toast('Salary payment saved'); renderRoute();
+    });
+    if(editItem) $('#delSP', root).addEventListener('click', ()=>{
+      if(confirm('Delete this payment record?')){ DATA.salaryPayments = DATA.salaryPayments.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute(); }
+    });
+  });
+}
+function generatePayslip(paymentId){
+  const p = DATA.salaryPayments.find(x=>x.id===paymentId);
+  const emp = DATA.employees.find(x=>x.id===p.employeeId);
+  const receiptHtml = `<div style="font-family:Arial,sans-serif;padding:6px">
+    <div style="text-align:center;margin-bottom:14px">
+      <div style="font-size:20px;font-weight:800;color:#4f46e5">GharSaz 360</div>
+      <div style="font-size:12px;color:#666">Salary Payslip</div>
+    </div>
+    <table style="width:100%;font-size:13px;border-collapse:collapse">
+      <tr><td style="padding:5px 0;color:#666">Employee</td><td style="text-align:right;font-weight:700">${escapeHtml(emp?emp.name:'—')}</td></tr>
+      <tr><td style="padding:5px 0;color:#666">Designation</td><td style="text-align:right">${escapeHtml(emp?emp.designation:'—')}</td></tr>
+      <tr><td style="padding:5px 0;color:#666">Month</td><td style="text-align:right">${escapeHtml(p.month)}</td></tr>
+      <tr><td style="padding:5px 0;color:#666">Basic Salary</td><td style="text-align:right">${fmtMoney(p.basic)}</td></tr>
+      ${p.bonus?`<tr><td style="padding:5px 0;color:#666">Bonus</td><td style="text-align:right">+${fmtMoney(p.bonus)}</td></tr>`:''}
+      ${p.absentDeduction?`<tr><td style="padding:5px 0;color:#666">Absent Deduction</td><td style="text-align:right">-${fmtMoney(p.absentDeduction)}</td></tr>`:''}
+      ${p.advanceDeduction?`<tr><td style="padding:5px 0;color:#666">Advance Deduction</td><td style="text-align:right">-${fmtMoney(p.advanceDeduction)}</td></tr>`:''}
+      <tr><td style="padding:8px 0;font-weight:800;border-top:1px solid #ddd">Net Payable</td><td style="text-align:right;font-weight:800;border-top:1px solid #ddd">${fmtMoney(p.net)}</td></tr>
+      <tr><td style="padding:5px 0;color:#666">Status</td><td style="text-align:right">${p.status}</td></tr>
+      <tr><td style="padding:5px 0;color:#666">Date Issued</td><td style="text-align:right">${fmtDate(todayISO())}</td></tr>
+    </table>
+    <div style="text-align:center;margin-top:16px;font-size:11px;color:#999">Generated by GharSaz 360 · 100% Offline App</div>
+  </div>`;
+  openSheet(`${sheetHeader('Salary Payslip')}
+    <div class="card" style="box-shadow:none">${receiptHtml}</div>
+    <div style="display:flex;gap:10px;margin-top:10px">
+      <button class="btn btn-outline btn-block" id="waSlip">Share on WhatsApp</button>
+      <button class="btn btn-primary btn-block" id="dlSlip">${ICN.down} Download</button>
+    </div>`, (root)=>{
+      $('#dlSlip', root).addEventListener('click', ()=>{
+        const text = `GharSaz 360 - Salary Payslip\nEmployee: ${emp?emp.name:''}\nMonth: ${p.month}\nBasic: ${fmtMoney(p.basic)}\nNet Payable: ${fmtMoney(p.net)}\nStatus: ${p.status}\nDate: ${fmtDate(todayISO())}`;
+        downloadFile(`Payslip-${emp?emp.name:'employee'}-${p.month}.txt`, text, 'text/plain');
+      });
+      $('#waSlip', root).addEventListener('click', ()=>{
+        const text = encodeURIComponent(`GharSaz 360 Salary Payslip\nEmployee: ${emp?emp.name:''}\nMonth: ${p.month}\nNet Payable: ${fmtMoney(p.net)}\nStatus: ${p.status}`);
+        window.open(`https://wa.me/${(emp&&emp.phone)?emp.phone.replace(/\D/g,''):''}?text=${text}`, '_blank');
+      });
+    });
+}
+function renderSalary(){
+  if(!DATA.employees.length){
+    $('#viewRoot').innerHTML = emptyState('briefcase','Koi employee register nahi','Ghar ya office staff add karein', 'salary-picker');
+    return;
+  }
+  const activeEmployees = DATA.employees.filter(e=>e.status!=='Inactive');
+  const totalPayroll = activeEmployees.reduce((s,e)=>s+Number(e.monthlySalary||0),0);
+  const totalAdvances = DATA.employees.reduce((s,e)=>s+staffAdvanceOutstanding(e.id),0);
+
+  let html = `<div class="grid-2">
+    <div class="stat-card" style="background:linear-gradient(135deg,#4338ca,#818cf8)"><div class="stat-label">Monthly Payroll</div><div class="stat-value">${fmtMoney(totalPayroll)}</div></div>
+    <div class="stat-card danger"><div class="stat-label">Advances Outstanding</div><div class="stat-value">${fmtMoney(totalAdvances)}</div></div>
+  </div>`;
+
+  html += `<div class="section-title">Staff &amp; Attendance</div><div class="card">` +
+    DATA.employees.map(e=>{
+      const est = staffEstimatedNetSalary(e);
+      const outstanding = staffAdvanceOutstanding(e.id);
+      return `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
+        <div class="card-row" style="justify-content:space-between">
+          <div class="card-row" onclick="openEmployeeForm('${e.id}')" style="cursor:pointer">
+            <div class="avatar" style="background:#e0e7ff;color:#4338ca;width:36px;height:36px;border-radius:11px">${icon('briefcase')}</div>
+            <div><div style="font-weight:700;font-size:13px">${escapeHtml(e.name)}</div><div class="card-sub">${escapeHtml(e.designation||'')} · ${fmtMoney(e.monthlySalary)}/mo ${e.status==='Inactive'?'· Inactive':''}</div></div>
+          </div>
+          <div style="text-align:right"><div class="card-sub">Est. Net (this month)</div><div style="font-weight:800">${fmtMoney(est)}</div>
+            ${outstanding?`<div class="card-sub" style="color:#dc2626">Advance: ${fmtMoney(outstanding)}</div>`:''}
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <button class="btn btn-sm btn-ghost" onclick="markStaffAttendance('${e.id}','Present')">Present</button>
+          <button class="btn btn-sm btn-ghost" onclick="markStaffAttendance('${e.id}','Half-Day')">Half-Day</button>
+          <button class="btn btn-sm btn-ghost" onclick="markStaffAttendance('${e.id}','Absent')">Absent</button>
+          <button class="btn btn-sm btn-outline" onclick="openSalaryAdvanceForm(null)">+ Advance</button>
+        </div>
+      </div>`;
+    }).join('') + `</div>`;
+
+  html += `<div class="section-title">Advances / Loans</div>`;
+  const advs = DATA.salaryAdvances.slice().reverse();
+  html += advs.length ? `<div class="card">` + advs.slice(0,10).map(a=>{
+    const emp = DATA.employees.find(x=>x.id===a.employeeId);
+    return `<div class="list-item" onclick="openSalaryAdvanceForm('${a.id}')">
+      <div class="avatar" style="background:#fee2e2;color:#991b1b">${icon('wallet')}</div>
+      <div class="meta"><div class="t">${escapeHtml(emp?emp.name:'—')}</div><div class="s">${fmtDate(a.date)} ${a.settled?'· Settled':'· Outstanding'}</div></div>
+      <div class="amt">${fmtMoney(a.amount)}</div>
+    </div>`;
+  }).join('') + `</div>` : emptyState('wallet','Koi advance record nahi','');
+
+  html += `<div class="section-title">Salary Payments</div>`;
+  const pays = DATA.salaryPayments.slice().reverse();
+  html += pays.length ? `<div class="card">` + pays.slice(0,10).map(p=>{
+    const emp = DATA.employees.find(x=>x.id===p.employeeId);
+    const level = p.status==='Paid'?'green':p.status==='Partial'?'amber':'red';
+    return `<div class="list-item">
+      <div class="avatar" style="background:#e0e7ff;color:#4338ca">${icon('briefcase')}</div>
+      <div class="meta" onclick="openSalaryPaymentForm('${p.id}')"><div class="t">${escapeHtml(emp?emp.name:'—')} · ${p.month}</div><div class="s">${fmtMoney(p.net)}</div></div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+        <span class="badge ${level}">${p.status}</span>
+        <button class="btn btn-sm btn-outline" onclick="generatePayslip('${p.id}')">${ICN.print} Slip</button>
+      </div>
+    </div>`;
+  }).join('') + `</div>` : emptyState('briefcase','Koi salary payment record nahi','');
+
+  $('#viewRoot').innerHTML = html;
+}
+
+/* ---------------------------------------------------------------------- *
  * 14. ASSETS & WARRANTY / MAINTENANCE SCHEDULER
  * ---------------------------------------------------------------------- */
 function renderAssets(){
@@ -1829,6 +2099,7 @@ const ROUTE_RENDERERS = {
   rent: renderRent,
   udhar: renderUdhar,
   construction: renderConstruction,
+  salary: renderSalary,
   assets: renderAssets,
   maintenance: renderMaintenance,
   vehicle: renderVehicle,
@@ -1945,6 +2216,21 @@ function getPrintData(route){
           DATA.udharTx.slice().reverse().map(t=>{
             const u = DATA.udhars.find(x=>x.id===t.udharId);
             return [u?u.name:'', t.type, fmtMoney(t.amount), fmtDate(t.date), t.status];
+          })),
+      ]};
+    case 'salary':
+      return { title:'Salary Management Report', sections: [
+        pdfSection('Employees', ['Name','Designation','Phone','Monthly Salary','Status'],
+          DATA.employees.map(e=>[e.name,e.designation||'',e.phone||'',fmtMoney(e.monthlySalary),e.status||'Active'])),
+        pdfSection('Advances / Loans', ['Employee','Amount','Date','Settled'],
+          DATA.salaryAdvances.slice().reverse().map(a=>{
+            const emp = DATA.employees.find(x=>x.id===a.employeeId);
+            return [emp?emp.name:'', fmtMoney(a.amount), fmtDate(a.date), a.settled?'Yes':'No'];
+          })),
+        pdfSection('Salary Payments', ['Employee','Month','Basic','Bonus','Deductions','Net Payable','Status'],
+          DATA.salaryPayments.slice().reverse().map(p=>{
+            const emp = DATA.employees.find(x=>x.id===p.employeeId);
+            return [emp?emp.name:'', p.month, fmtMoney(p.basic), fmtMoney(p.bonus), fmtMoney((p.absentDeduction||0)+(p.advanceDeduction||0)), fmtMoney(p.net), p.status];
           })),
       ]};
     case 'construction':
