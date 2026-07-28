@@ -363,6 +363,21 @@ kbd{background:var(--surface-2);padding:2px 6px;border-radius:6px;font-size:11px
 
 <div class="toast" id="toast"></div>
 
+<!-- Full-screen error overlay: shown for uncaught errors, storage failures, etc. -->
+<div id="errorScreen" style="display:none;position:fixed;inset:0;z-index:9998;background:var(--bg);flex-direction:column;align-items:center;justify-content:center;padding:30px;text-align:center;">
+  <div style="width:76px;height:76px;border-radius:22px;background:#fee2e2;display:flex;align-items:center;justify-content:center;margin-bottom:18px;">
+    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+  </div>
+  <div id="errorTitle" style="font-size:18px;font-weight:800;color:var(--text);margin-bottom:8px;">Kuch Ghalat Ho Gaya</div>
+  <div id="errorMsg" style="font-size:13px;color:var(--text-dim);max-width:320px;margin-bottom:22px;line-height:1.6;">
+    Ek unexpected error aa gayi hai. Aapka data mehfooz hai — app reload karke dobara try karein.
+  </div>
+  <div style="display:flex;gap:10px;">
+    <button class="btn btn-primary" onclick="location.reload()">Reload App</button>
+    <button class="btn btn-outline" onclick="document.getElementById('errorScreen').style.display='none'">Wapis Jayen</button>
+  </div>
+</div>
+
 <script src="app.js" defer></script>
 </body>
 </html>
