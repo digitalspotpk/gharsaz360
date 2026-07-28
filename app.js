@@ -96,12 +96,36 @@ function csvEscape(s){
   s = String(s??'');
   return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
 }
-function downloadFile(filename, content, mime){
-  const blob = new Blob([content], {type:mime||'application/octet-stream'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename; document.body.appendChild(a); a.click();
-  a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 2000);
+async function downloadFile(filename, content, mime){
+  mime = mime || 'application/octet-stream';
+  const blob = new Blob([content], {type:mime});
+
+  // Installed TWA/PWA shells on Android often cannot open blob: URLs
+  // directly (the anchor-download trick fails with "Can not handle uri").
+  // The Web Share API hands the file to Android's native share sheet
+  // instead, which works reliably inside an installed app. We try this
+  // first and only fall back to the classic download link if it's
+  // unavailable (e.g. desktop browsers, or older Android WebViews).
+  try{
+    const file = new File([blob], filename, {type:mime});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({files:[file], title:filename});
+      return;
+    }
+  }catch(e){
+    if(e && e.name === 'AbortError') return; // user closed the share sheet — not an error
+    console.warn('Share failed, falling back to direct download:', e);
+  }
+
+  try{
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+    a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 2000);
+  }catch(e){
+    console.error('Download fallback failed:', e);
+    toast('Download nahi ho saka — is browser mein file save karna support nahi hai');
+  }
 }
 
 /* ---------------------------------------------------------------------- *
@@ -2632,7 +2656,6 @@ function renderGoals(){
  * ---------------------------------------------------------------------- */
 function exportJSON(){
   downloadFile(`gharsaz360-backup-${todayISO()}.json`, JSON.stringify(DATA, null, 2), 'application/json');
-  toast('JSON backup exported');
 }
 function exportCSV(){
   const rows = [['Type','Date','Category/Name','Amount','Notes']];
@@ -2650,7 +2673,6 @@ function exportCSV(){
   DATA.charityRecords.forEach(c=>rows.push(['Charity', c.date, c.type, c.amount, c.recipient||'']));
   const csv = rows.map(r=>r.map(csvEscape).join(',')).join('\n');
   downloadFile(`gharsaz360-export-${todayISO()}.csv`, csv, 'text/csv');
-  toast('CSV exported');
 }
 function importJSON(file){
   const reader = new FileReader();
