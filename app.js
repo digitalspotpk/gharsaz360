@@ -176,6 +176,24 @@ function isStandaloneApp(){
         || document.referrer.indexOf('android-app://') === 0;
   }catch(e){ return false; }
 }
+async function copyTextUniversal(text){
+  try{
+    await navigator.clipboard.writeText(text);
+    return true;
+  }catch(e){ /* fall through to legacy method */ }
+  try{
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed'; ta.style.left = '-9999px'; ta.style.top = '0';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  }catch(e){
+    return false;
+  }
+}
 function showCopyFallback(filename, content){
   openSheet(`${sheetHeader(filename)}
     <div class="help-text" style="margin-bottom:10px">Is app mein direct file save/download support nahi hai. Neeche wale text ko copy kar ke kisi bhi jagah (WhatsApp, Email, Notes) paste kar dein.</div>
@@ -183,8 +201,8 @@ function showCopyFallback(filename, content){
     <button class="btn btn-primary btn-block" style="margin-top:12px" id="copyNowBtn">Copy Karein</button>`,
     (root)=>{
       $('#copyNowBtn', root).addEventListener('click', async ()=>{
-        try{ await navigator.clipboard.writeText(content); toast('Copy ho gaya'); }
-        catch(e){ toast('Text ko manually select karke copy karein'); }
+        const ok = await copyTextUniversal(content);
+        toast(ok ? 'Copy ho gaya' : 'Text ko manually select karke copy karein (upar tap karein)');
       });
     });
 }
@@ -241,14 +259,10 @@ async function downloadBlob(filename, blob, textFallback){
   // 4. Last resort — only meaningful for text content (a PDF/binary can't
   // usefully be "copied" as text).
   if(typeof textFallback === 'string'){
-    try{
-      await navigator.clipboard.writeText(textFallback);
-      toast(filename+' clipboard par copy ho gaya');
-      return;
-    }catch(e){
-      showCopyFallback(filename, textFallback);
-      return;
-    }
+    const ok = await copyTextUniversal(textFallback);
+    if(ok){ toast(filename+' clipboard par copy ho gaya'); return; }
+    showCopyFallback(filename, textFallback);
+    return;
   }
   toast('Is app mein file save nahi ho saki — is APK ka WebView downloads ko block kar raha hai. Chrome browser mein (site ke URL par) try karein, ya app dobara TWA tool (PWABuilder) se banayen.');
 }
@@ -2818,17 +2832,36 @@ function exportCSV(){
   const csv = rows.map(r=>r.map(csvEscape).join(',')).join('\n');
   downloadFile(`gharsaz360-export-${todayISO()}.csv`, csv, 'text/csv');
 }
+function restoreFromJSON(jsonText){
+  try{
+    const parsed = JSON.parse(jsonText);
+    if(typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('invalid');
+    DATA = Object.assign(defaultState(), parsed);
+    saveData(); toast('Data imported successfully'); renderRoute();
+    return true;
+  }catch(err){
+    toast('Invalid backup data');
+    return false;
+  }
+}
 function importJSON(file){
   const reader = new FileReader();
-  reader.onload = (e)=>{
-    try{
-      const parsed = JSON.parse(e.target.result);
-      if(typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('invalid');
-      DATA = Object.assign(defaultState(), parsed);
-      saveData(); toast('Data imported successfully'); renderRoute();
-    }catch(err){ toast('Invalid backup file'); }
-  };
+  reader.onload = (e)=> restoreFromJSON(e.target.result);
   reader.readAsText(file);
+}
+function openPasteRestore(){
+  openSheet(`${sheetHeader('Paste Backup to Restore')}
+    <div class="help-text" style="margin-bottom:10px">Agar aapke paas file ki bajaye copy-kiya hua JSON backup text hai, to yahan paste karein.</div>
+    <textarea id="pasteArea" placeholder="Yahan JSON backup paste karein..." style="width:100%;min-height:220px;font-family:monospace;font-size:12px;padding:10px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface-2)"></textarea>
+    <button class="btn btn-primary btn-block" style="margin-top:12px" id="pasteRestoreBtn">Restore From Pasted Text</button>`,
+    (root)=>{
+      $('#pasteRestoreBtn', root).addEventListener('click', ()=>{
+        const text = $('#pasteArea', root).value.trim();
+        if(!text){ toast('Pehle backup text paste karein'); return; }
+        if(!confirm('Ye mojooda data ko overwrite kar dega. Aage badhein?')) return;
+        if(restoreFromJSON(text)) closeSheet();
+      });
+    });
 }
 function wipeAllData(){
   if(confirm('Yeh permanent hai — sab data delete ho jayega. Pakka?')){
@@ -2852,12 +2885,16 @@ function renderSettings(){
     <div class="divider"></div>
     <button class="btn btn-primary btn-block" onclick="exportJSON()">${ICN.down} Export JSON Backup</button>
     <div style="height:10px"></div>
+    <button class="btn btn-outline btn-block" id="copyBackupBtn">Copy Backup as Text (Guaranteed)</button>
+    <div style="height:10px"></div>
     <button class="btn btn-outline btn-block" onclick="exportCSV()">${ICN.down} Export CSV</button>
     <div style="height:10px"></div>
     <label class="btn btn-ghost btn-block" style="cursor:pointer">
-      ${ICN.up} Import JSON Backup
+      ${ICN.up} Import JSON Backup (File)
       <input type="file" accept="application/json" style="display:none" id="importFile">
     </label>
+    <div style="height:10px"></div>
+    <button class="btn btn-outline btn-block" id="pasteRestoreOpenBtn">Paste Backup Text to Restore</button>
     <div class="help-text">Import se pehle current data ka backup zaroor le lein — import mojooda data ko overwrite karta hai.</div>
   </div>
 
@@ -2889,6 +2926,13 @@ function renderSettings(){
   </div>`;
   $('#viewRoot').innerHTML = html;
   $('#importFile').addEventListener('change', (e)=>{ if(e.target.files[0]) importJSON(e.target.files[0]); });
+  $('#pasteRestoreOpenBtn').addEventListener('click', openPasteRestore);
+  $('#copyBackupBtn').addEventListener('click', async ()=>{
+    const text = JSON.stringify(DATA, null, 2);
+    const ok = await copyTextUniversal(text);
+    if(ok) toast('Backup clipboard par copy ho gaya — kahin bhi paste kar ke mehfooz rakh lein');
+    else showCopyFallback(`gharsaz360-backup-${todayISO()}`, text);
+  });
   $('#toggleThemeSettings').addEventListener('click', toggleTheme);
   $('#checkUpdatesBtn').addEventListener('click', doRefresh);
   $('#shareAppBtn').addEventListener('click', shareApp);
@@ -3341,14 +3385,10 @@ function exportPDF(){
       });
       $('#doCopyBtn', root).addEventListener('click', async ()=>{
         const text = printDataToText(data);
-        try{
-          await navigator.clipboard.writeText(text);
-          toast('Copy ho gaya');
-          closeSheet();
-        }catch(e){
-          closeSheet();
-          showCopyFallback(data.title, text);
-        }
+        const ok = await copyTextUniversal(text);
+        closeSheet();
+        if(ok) toast('Copy ho gaya');
+        else showCopyFallback(data.title, text);
       });
     });
 }
