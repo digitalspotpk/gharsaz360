@@ -122,10 +122,26 @@ async function downloadFile(filename, content, mime){
     const a = document.createElement('a');
     a.href = url; a.download = filename; document.body.appendChild(a); a.click();
     a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 2000);
+    return;
   }catch(e){
-    console.error('Download fallback failed:', e);
-    toast('Download nahi ho saka — is browser mein file save karna support nahi hai');
+    console.warn('Blob download failed, falling back to clipboard/manual copy:', e);
   }
+
+  // Final fallback for restricted WebViews where neither Share nor blob
+  // download works: copy to clipboard, or show a selectable textbox.
+  if(typeof content === 'string'){
+    try{
+      await navigator.clipboard.writeText(content);
+      toast(filename+' clipboard par copy ho gaya (download available nahi is app mein)');
+      return;
+    }catch(e){
+      openSheet(`${sheetHeader(filename)}
+        <textarea readonly onclick="this.select()" style="width:100%;min-height:320px;font-family:monospace;font-size:12px;padding:10px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface-2)">${escapeHtml(content)}</textarea>
+        <div class="help-text">Textbox par tap karein — sab select ho jayega, phir copy karein.</div>`);
+      return;
+    }
+  }
+  toast('Download nahi ho saka — is app mein file save karna support nahi hai');
 }
 
 /* ---------------------------------------------------------------------- *
@@ -2730,7 +2746,7 @@ function renderSettings(){
 
   <div class="section-title">Google Drive Sync</div>
   <div class="card">
-    <div class="card-sub">Google Drive API se personal backup sync karne ke liye apni Google Cloud project mein ek OAuth Client ID banayen aur <kbd>guide.html</kbd> mein diye gaye steps follow karein. Ye app kisi bhi external server ko data nahi bhejta — sync direct aapke apne Google Drive account se hota hai.</div>
+    <div class="card-sub">Google Drive API se personal backup sync karne ka feature is version mein shamil nahi hai. Iske ilawa aap "Export JSON Backup" istemal kar ke apna data manually kahin bhi (Google Drive, WhatsApp, Email) save/share kar sakte hain — koi bhi data external server ko nahi jata.</div>
   </div>
 
   <div class="section-title">Appearance</div>
@@ -2742,6 +2758,8 @@ function renderSettings(){
   <div class="section-title">Support</div>
   <div class="card">
     <button class="btn btn-block" style="background:#25D366;color:#fff" onclick="openWhatsAppSupport()">${ICN.wa} Contact Developer on WhatsApp</button>
+    <div style="height:10px"></div>
+    <button class="btn btn-outline btn-block" id="shareAppBtn">${ICN.repeat} Share This App</button>
   </div>
 
   <div class="section-title">Danger Zone</div>
@@ -2750,12 +2768,13 @@ function renderSettings(){
   </div>
 
   <div style="text-align:center;margin-top:24px;font-size:11px;color:var(--text-dim)">
-    GharSaz 360 · v1.0 · 100% Offline · <a href="privacy-policy.html" target="_blank" style="text-decoration:underline">Privacy Policy</a> · <a href="guide.html" target="_blank" style="text-decoration:underline">Setup Guide</a>
+    GharSaz 360 · v1.0 · 100% Offline · <a href="privacy-policy.html" target="_blank" style="text-decoration:underline">Privacy Policy</a>
   </div>`;
   $('#viewRoot').innerHTML = html;
   $('#importFile').addEventListener('change', (e)=>{ if(e.target.files[0]) importJSON(e.target.files[0]); });
   $('#toggleThemeSettings').addEventListener('click', toggleTheme);
   $('#checkUpdatesBtn').addEventListener('click', doRefresh);
+  $('#shareAppBtn').addEventListener('click', shareApp);
 }
 
 /* ---------------------------------------------------------------------- *
@@ -2770,6 +2789,22 @@ function toggleTheme(){
 function openWhatsAppSupport(){
   const msg = encodeURIComponent('Hello, I need assistance with GharSaz 360 App');
   window.open(`https://wa.me/${SETTINGS.whatsapp.replace(/\D/g,'')}?text=${msg}`, '_blank');
+}
+async function shareApp(){
+  const url = location.href.split('#')[0];
+  const text = 'GharSaz 360 — Smart Home, Property & Life Suite. Ek behtareen offline app ghar, property, aur rozmara zindagi manage karne ke liye!';
+  try{
+    if(navigator.share){
+      await navigator.share({title:'GharSaz 360', text, url});
+      return;
+    }
+  }catch(e){ if(e && e.name==='AbortError') return; }
+  try{
+    await navigator.clipboard.writeText(`${text}\n${url}`);
+    toast('Link copy ho gaya — kahin bhi paste kar dein');
+  }catch(e){
+    toast('Share available nahi is browser mein');
+  }
 }
 
 const ROUTE_RENDERERS = {
@@ -3139,14 +3174,66 @@ function getPrintData(route){
       return null;
   }
 }
-function exportPDF(){
-  const data = getPrintData(ROUTE);
-  if(!data){ toast('Is tab ke liye PDF export available nahi'); return; }
+function renderPrintArea(data){
   const area = $('#printArea');
   area.innerHTML = `<h1>GharSaz 360 — ${escapeHtml(data.title)}</h1>
     <div class="print-date">Generated on ${fmtDate(todayISO())}</div>
     ${data.note?`<p class="print-empty">${escapeHtml(data.note)}</p>`:''}
     ${data.sections.join('')}
     <div class="print-footer">Generated by GharSaz 360 · 100% Offline App</div>`;
-  setTimeout(()=>{ window.print(); }, 150);
+}
+function htmlToPlainText(html){
+  return html
+    .replace(/<h2>(.*?)<\/h2>/g, '\n$1\n' + '-'.repeat(28) + '\n')
+    .replace(/<p class="print-empty">(.*?)<\/p>/g, '$1\n')
+    .replace(/<\/tr>/g, '\n')
+    .replace(/<tr>/g, '')
+    .replace(/<th>/g, '').replace(/<\/th>/g, '  |  ')
+    .replace(/<td>/g, '').replace(/<\/td>/g, '  |  ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'")
+    .trim();
+}
+function printDataToText(data){
+  let out = `GharSaz 360 — ${data.title}\nGenerated: ${fmtDate(todayISO())}\n`;
+  if(data.note) out += `\n${data.note}\n`;
+  data.sections.forEach(sec=>{ out += '\n' + htmlToPlainText(sec) + '\n'; });
+  return out;
+}
+function exportPDF(){
+  const data = getPrintData(ROUTE);
+  if(!data){ toast('Is tab ke liye export available nahi'); return; }
+  openSheet(`${sheetHeader('Export: '+data.title)}
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button class="btn btn-primary btn-block" id="doPrintBtn">${ICN.print} Print / Save as PDF</button>
+      <button class="btn btn-outline btn-block" id="doShareTextBtn">${ICN.down} Download / Share as File</button>
+      <button class="btn btn-ghost btn-block" id="doCopyBtn">Copy Data (Clipboard)</button>
+    </div>
+    <div class="help-text" style="margin-top:12px">Agar "Print" is app mein kaam na kare (kuch installed apps par aisa ho sakta hai), to "Download / Share" ya "Copy" istemal karein — dono hamesha kaam karte hain.</div>`,
+    (root)=>{
+      $('#doPrintBtn', root).addEventListener('click', ()=>{
+        closeSheet();
+        renderPrintArea(data);
+        setTimeout(()=>{
+          try{ window.print(); }
+          catch(e){ toast('Print is app mein available nahi — "Download/Share" ya "Copy" try karein'); }
+        }, 150);
+      });
+      $('#doShareTextBtn', root).addEventListener('click', ()=>{
+        const text = printDataToText(data);
+        downloadFile(`GharSaz360-${data.title.replace(/\s+/g,'-')}-${todayISO()}.txt`, text, 'text/plain');
+      });
+      $('#doCopyBtn', root).addEventListener('click', async ()=>{
+        const text = printDataToText(data);
+        try{
+          await navigator.clipboard.writeText(text);
+          toast('Copy ho gaya');
+          closeSheet();
+        }catch(e){
+          openSheet(`${sheetHeader('Copy Manually')}
+            <textarea readonly onclick="this.select()" style="width:100%;min-height:320px;font-family:monospace;font-size:12px;padding:10px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface-2)">${escapeHtml(text)}</textarea>
+            <div class="help-text">Textbox par tap karein — sab select ho jayega, phir copy karein.</div>`);
+        }
+      });
+    });
 }
