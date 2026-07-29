@@ -96,6 +96,78 @@ function csvEscape(s){
   s = String(s??'');
   return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
 }
+/* ---------------------------------------------------------------------- *
+ * REAL PDF GENERATOR — pure JavaScript, zero dependencies. Builds a
+ * genuinely valid .pdf file directly per the PDF 1.4 spec (multi-page,
+ * Helvetica base-14 font, no embedding needed). This is what powers the
+ * actual "Download PDF" button, separate from window.print().
+ * Note: only Latin/ASCII characters render (Helvetica has no Urdu/Arabic
+ * glyphs without font embedding); non-ASCII characters are shown as '?'.
+ * ---------------------------------------------------------------------- */
+function pdfEscape(s){
+  return String(s).replace(/[^\x20-\x7E]/g,'?').replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');
+}
+function wrapLine(line, maxChars){
+  if(line.length<=maxChars) return [line];
+  const out = [];
+  let remaining = line;
+  while(remaining.length>maxChars){
+    let cut = remaining.lastIndexOf(' ', maxChars);
+    if(cut<=0) cut = maxChars;
+    out.push(remaining.slice(0,cut));
+    remaining = remaining.slice(cut).trim();
+  }
+  if(remaining) out.push(remaining);
+  return out;
+}
+function buildSimplePDF(title, bodyText){
+  const rawLines = (title ? [title, ''] : []).concat(bodyText.split('\n'));
+  let lines = [];
+  rawLines.forEach(l=> lines.push(...wrapLine(l, 100)));
+  if(!lines.length) lines = ['(no data)'];
+
+  const linesPerPage = 58;
+  const pages = [];
+  for(let i=0;i<lines.length;i+=linesPerPage) pages.push(lines.slice(i,i+linesPerPage));
+
+  const pageObjIds = [], contentObjIds = [];
+  let nextId = 3;
+  pages.forEach(()=>{ pageObjIds.push(nextId++); contentObjIds.push(nextId++); });
+  const fontObjId = nextId++;
+
+  let body = '%PDF-1.4\n';
+  const offsets = {};
+  function addObj(id, content){
+    offsets[id] = body.length;
+    body += `${id} 0 obj\n${content}\nendobj\n`;
+  }
+
+  addObj(1, `<< /Type /Catalog /Pages 2 0 R >>`);
+  addObj(2, `<< /Type /Pages /Kids [${pageObjIds.map(id=>id+' 0 R').join(' ')}] /Count ${pages.length} >>`);
+
+  pages.forEach((pageLines, idx)=>{
+    const pid = pageObjIds[idx], cid = contentObjIds[idx];
+    addObj(pid, `<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 ${fontObjId} 0 R >> >> /MediaBox [0 0 612 792] /Contents ${cid} 0 R >>`);
+    let stream = 'BT /F1 9 Tf 40 760 Td 12 TL\n';
+    pageLines.forEach(line=>{ stream += `(${pdfEscape(line)}) Tj T*\n`; });
+    stream += 'ET';
+    addObj(cid, `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+  });
+
+  addObj(fontObjId, `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>`);
+
+  const xrefStart = body.length;
+  const totalObjs = fontObjId;
+  let xref = `xref\n0 ${totalObjs+1}\n0000000000 65535 f \n`;
+  for(let id=1; id<=totalObjs; id++){
+    xref += String(offsets[id]||0).padStart(10,'0') + ' 00000 n \n';
+  }
+  body += xref;
+  body += `trailer\n<< /Size ${totalObjs+1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+
+  return new Blob([body], {type:'application/pdf'});
+}
+
 function isStandaloneApp(){
   try{
     return window.matchMedia('(display-mode: standalone)').matches
@@ -116,13 +188,11 @@ function showCopyFallback(filename, content){
       });
     });
 }
-async function downloadFile(filename, content, mime){
-  mime = mime || 'application/octet-stream';
-  const blob = new Blob([content], {type:mime});
+async function downloadBlob(filename, blob, textFallback){
+  const mime = blob.type || 'application/octet-stream';
   const standalone = isStandaloneApp();
 
-  // Web Share API works reasonably well even inside installed apps when
-  // supported, so it's always worth trying first.
+  // 1. Web Share API — works well even inside installed apps when supported.
   try{
     const file = new File([blob], filename, {type:mime});
     if(navigator.canShare && navigator.canShare({files:[file]})){
@@ -134,12 +204,28 @@ async function downloadFile(filename, content, mime){
     console.warn('Share failed:', e);
   }
 
-  // Some installed WebView-based app shells intercept blob: URIs at the
-  // Android OS level and fail with an uncatchable "Can not handle uri"
-  // system error — the anchor .click() call itself never throws, so our
-  // JS never sees a failure. We've confirmed this happens in practice, so
-  // when running as an installed/standalone app we skip this path
-  // entirely and go straight to the guaranteed clipboard fallback below.
+  // 2. data: URI download. Different delivery mechanism than blob: — some
+  // installed WebView shells that reject blob: URIs with "Can not handle
+  // uri" will still accept data: URIs since they're self-contained and
+  // don't need to be resolved back against the page context.
+  try{
+    const dataUrl = await new Promise((resolve, reject)=>{
+      const reader = new FileReader();
+      reader.onload = ()=>resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    const a = document.createElement('a');
+    a.href = dataUrl; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+    if(!standalone) return; // in a real browser tab this reliably works — stop here
+    // Inside an installed app we can't detect success, so we still fall
+    // through to also offer the guaranteed fallback below.
+  }catch(e){
+    console.warn('data: URI download failed:', e);
+  }
+
+  // 3. Classic blob: URI anchor download — normal browser tabs only
+  // (proven unreliable inside some installed WebView shells).
   if(!standalone){
     try{
       const url = URL.createObjectURL(blob);
@@ -152,19 +238,27 @@ async function downloadFile(filename, content, mime){
     }
   }
 
-  // Guaranteed-to-work fallback: clipboard, or a selectable textbox if
-  // even the Clipboard API is blocked.
-  if(typeof content === 'string'){
+  // 4. Last resort — only meaningful for text content (a PDF/binary can't
+  // usefully be "copied" as text).
+  if(typeof textFallback === 'string'){
     try{
-      await navigator.clipboard.writeText(content);
-      toast(filename+' clipboard par copy ho gaya (is app mein direct download available nahi)');
+      await navigator.clipboard.writeText(textFallback);
+      toast(filename+' clipboard par copy ho gaya');
       return;
     }catch(e){
-      showCopyFallback(filename, content);
+      showCopyFallback(filename, textFallback);
       return;
     }
   }
-  toast('Save nahi ho saka — Copy option try karein');
+  toast('Is app mein file save nahi ho saki — is APK ka WebView downloads ko block kar raha hai. Chrome browser mein (site ke URL par) try karein, ya app dobara TWA tool (PWABuilder) se banayen.');
+}
+async function downloadFile(filename, content, mime){
+  const blob = new Blob([content], {type:mime||'application/octet-stream'});
+  await downloadBlob(filename, blob, typeof content==='string'?content:undefined);
+}
+async function downloadPDF(filename, title, bodyText){
+  const blob = buildSimplePDF(title, bodyText);
+  await downloadBlob(filename, blob, bodyText);
 }
 
 /* ---------------------------------------------------------------------- *
@@ -3226,30 +3320,24 @@ function printDataToText(data){
 function exportPDF(){
   const data = getPrintData(ROUTE);
   if(!data){ toast('Is tab ke liye export available nahi'); return; }
-  const standalone = isStandaloneApp();
-  const printBtn = `<button class="btn ${standalone?'btn-outline':'btn-primary'} btn-block" id="doPrintBtn">${ICN.print} Print / Save as PDF</button>`;
-  const copyBtn = `<button class="btn ${standalone?'btn-primary':'btn-outline'} btn-block" id="doCopyBtn">Copy Data (Clipboard)</button>`;
-  const shareBtn = `<button class="btn btn-outline btn-block" id="doShareTextBtn">${ICN.down} Download / Share as File</button>`;
-  const buttonsHtml = standalone
-    ? `${copyBtn}${shareBtn}${printBtn}`
-    : `${printBtn}${shareBtn}${copyBtn}`;
+  const pdfBtn = `<button class="btn btn-primary btn-block" id="doPdfBtn">${ICN.down} Download PDF File</button>`;
+  const printBtn = `<button class="btn btn-outline btn-block" id="doPrintBtn">${ICN.print} Print / Save as PDF (browser)</button>`;
+  const copyBtn = `<button class="btn btn-ghost btn-block" id="doCopyBtn">Copy Data (Clipboard)</button>`;
   openSheet(`${sheetHeader('Export: '+data.title)}
-    <div style="display:flex;flex-direction:column;gap:10px">${buttonsHtml}</div>
-    <div class="help-text" style="margin-top:12px">${standalone
-      ? 'Is installed app mein "Copy" sab se pukhta tareeqa hai — data copy kar ke WhatsApp/Notes mein paste kar dein.'
-      : 'Agar "Print" kaam na kare, to "Download / Share" ya "Copy" istemal karein — dono hamesha kaam karte hain.'}</div>`,
+    <div style="display:flex;flex-direction:column;gap:10px">${pdfBtn}${printBtn}${copyBtn}</div>
+    <div class="help-text" style="margin-top:12px">"Download PDF File" ek asli .pdf file banati hai. Agar ye is app mein bhi save na ho (kuch purane installed-app builders download block karte hain), to "Copy" hamesha kaam karega.</div>`,
     (root)=>{
+      $('#doPdfBtn', root).addEventListener('click', ()=>{
+        const text = printDataToText(data);
+        downloadPDF(`GharSaz360-${data.title.replace(/\s+/g,'-')}-${todayISO()}.pdf`, `GharSaz 360 — ${data.title}`, text);
+      });
       $('#doPrintBtn', root).addEventListener('click', ()=>{
         closeSheet();
         renderPrintArea(data);
         setTimeout(()=>{
           try{ window.print(); }
-          catch(e){ toast('Print is app mein available nahi — "Copy" ya "Download" try karein'); }
+          catch(e){ toast('Print is app mein available nahi — "Download PDF" ya "Copy" try karein'); }
         }, 150);
-      });
-      $('#doShareTextBtn', root).addEventListener('click', ()=>{
-        const text = printDataToText(data);
-        downloadFile(`GharSaz360-${data.title.replace(/\s+/g,'-')}-${todayISO()}.txt`, text, 'text/plain');
       });
       $('#doCopyBtn', root).addEventListener('click', async ()=>{
         const text = printDataToText(data);
