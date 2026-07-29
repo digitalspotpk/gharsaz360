@@ -96,100 +96,75 @@ function csvEscape(s){
   s = String(s??'');
   return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
 }
-// ===== FIXED FOR ANDROID WEBVIEW BLOB ERROR =====
-function isAndroidWebView(){
-  const ua = navigator.userAgent || '';
-  return /wv|Android.*Version\/[\d\.]+.*Chrome|Android.*WebView/i.test(ua) || !!window.Android || !!window.AndroidInterface;
+function isStandaloneApp(){
+  try{
+    return window.matchMedia('(display-mode: standalone)').matches
+        || window.matchMedia('(display-mode: fullscreen)').matches
+        || window.navigator.standalone === true
+        || document.referrer.indexOf('android-app://') === 0;
+  }catch(e){ return false; }
+}
+function showCopyFallback(filename, content){
+  openSheet(`${sheetHeader(filename)}
+    <div class="help-text" style="margin-bottom:10px">Is app mein direct file save/download support nahi hai. Neeche wale text ko copy kar ke kisi bhi jagah (WhatsApp, Email, Notes) paste kar dein.</div>
+    <textarea readonly onclick="this.select()" style="width:100%;min-height:320px;font-family:monospace;font-size:12px;padding:10px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface-2)">${escapeHtml(content)}</textarea>
+    <button class="btn btn-primary btn-block" style="margin-top:12px" id="copyNowBtn">Copy Karein</button>`,
+    (root)=>{
+      $('#copyNowBtn', root).addEventListener('click', async ()=>{
+        try{ await navigator.clipboard.writeText(content); toast('Copy ho gaya'); }
+        catch(e){ toast('Text ko manually select karke copy karein'); }
+      });
+    });
 }
 async function downloadFile(filename, content, mime){
   mime = mime || 'application/octet-stream';
+  const blob = new Blob([content], {type:mime});
+  const standalone = isStandaloneApp();
+
+  // Web Share API works reasonably well even inside installed apps when
+  // supported, so it's always worth trying first.
   try{
-    // 1) ANDROID NATIVE BRIDGE - Sabse pehle check (aapki app ke liye fix)
-    // App mein window.Android.saveBase64File() inject hoga to blob error kabhi nahi ayega
-    const tryAndroidBridge = (base64DataUrl) => {
-      const base64 = base64DataUrl.split(',')[1];
-      if(window.Android && typeof window.Android.saveBase64File === 'function'){
-        window.Android.saveBase64File(base64, filename, mime);
-        toast('File Downloaded: ' + filename);
-        return true;
-      }
-      if(window.AndroidInterface && typeof window.AndroidInterface.saveBase64File === 'function'){
-        window.AndroidInterface.saveBase64File(base64, filename, mime);
-        toast('File Downloaded: ' + filename);
-        return true;
-      }
-      return false;
-    };
-
-    const blob = new Blob([content], {type:mime});
-    
-    // Blob ko base64 mein convert karke Android bridge ko de sakte hain
-    const toBase64 = () => new Promise(res => {
-      const r = new FileReader();
-      r.onloadend = () => res(r.result);
-      r.readAsDataURL(blob);
-    });
-
-    // Agar Android WebView hai to pehle bridge try karo
-    if(isAndroidWebView()){
-      const dataUrl = await toBase64();
-      if(tryAndroidBridge(dataUrl)) return;
+    const file = new File([blob], filename, {type:mime});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({files:[file], title:filename});
+      return;
     }
-
-    // 2) Web Share API - TWA / Chrome ke liye best
-    try{
-      const file = new File([blob], filename, {type:mime});
-      if(navigator.canShare && navigator.canShare({files:[file]})){
-        await navigator.share({files:[file], title:filename});
-        return;
-      }
-    }catch(e){
-      if(e && e.name === 'AbortError') return;
-      console.warn('Share failed, trying next method:', e);
-    }
-
-    // 3) Normal blob download - Browser ke liye
-    if(!isAndroidWebView()){
-      try{
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = filename; document.body.appendChild(a); a.click();
-        a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 3000);
-        return;
-      }catch(e){
-        console.warn('Blob download failed:', e);
-      }
-    } else {
-      // Android mein blob fail hota hai to dataUrl se dobara bridge try
-      try{
-        const dataUrl = await toBase64();
-        if(tryAndroidBridge(dataUrl)) return;
-        // Agar bridge nahi to dataUrl se share intent kholo
-        const a = document.createElement('a');
-        a.href = dataUrl; a.download = filename; document.body.appendChild(a); a.click();
-        a.remove();
-        return;
-      }catch(e){ console.warn('Base64 fallback failed', e); }
-    }
-
-  }catch(mainErr){
-    console.error('downloadFile error', mainErr);
+  }catch(e){
+    if(e && e.name === 'AbortError') return; // user closed the share sheet — not an error
+    console.warn('Share failed:', e);
   }
 
-  // 4) Final fallback: clipboard
+  // Some installed WebView-based app shells intercept blob: URIs at the
+  // Android OS level and fail with an uncatchable "Can not handle uri"
+  // system error — the anchor .click() call itself never throws, so our
+  // JS never sees a failure. We've confirmed this happens in practice, so
+  // when running as an installed/standalone app we skip this path
+  // entirely and go straight to the guaranteed clipboard fallback below.
+  if(!standalone){
+    try{
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+      a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 2000);
+      return;
+    }catch(e){
+      console.warn('Blob download failed:', e);
+    }
+  }
+
+  // Guaranteed-to-work fallback: clipboard, or a selectable textbox if
+  // even the Clipboard API is blocked.
   if(typeof content === 'string'){
     try{
       await navigator.clipboard.writeText(content);
-      toast(filename+' clipboard par copy ho gaya');
+      toast(filename+' clipboard par copy ho gaya (is app mein direct download available nahi)');
       return;
     }catch(e){
-      openSheet(`${sheetHeader(filename)}
-        <textarea readonly onclick="this.select()" style="width:100%;min-height:320px;font-family:monospace;font-size:12px;padding:10px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface-2)">${escapeHtml(content)}</textarea>
-        <div class="help-text">Textbox par tap karein — sab select ho jayega, phir copy karein.</div>`);
+      showCopyFallback(filename, content);
       return;
     }
   }
-  toast('Download nahi ho saka — App update karein');
+  toast('Save nahi ho saka — Copy option try karein');
 }
 
 /* ---------------------------------------------------------------------- *
@@ -3251,32 +3226,25 @@ function printDataToText(data){
 function exportPDF(){
   const data = getPrintData(ROUTE);
   if(!data){ toast('Is tab ke liye export available nahi'); return; }
+  const standalone = isStandaloneApp();
+  const printBtn = `<button class="btn ${standalone?'btn-outline':'btn-primary'} btn-block" id="doPrintBtn">${ICN.print} Print / Save as PDF</button>`;
+  const copyBtn = `<button class="btn ${standalone?'btn-primary':'btn-outline'} btn-block" id="doCopyBtn">Copy Data (Clipboard)</button>`;
+  const shareBtn = `<button class="btn btn-outline btn-block" id="doShareTextBtn">${ICN.down} Download / Share as File</button>`;
+  const buttonsHtml = standalone
+    ? `${copyBtn}${shareBtn}${printBtn}`
+    : `${printBtn}${shareBtn}${copyBtn}`;
   openSheet(`${sheetHeader('Export: '+data.title)}
-    <div style="display:flex;flex-direction:column;gap:10px">
-      <button class="btn btn-primary btn-block" id="doPrintBtn">${ICN.print} Print / Save as PDF</button>
-      <button class="btn btn-outline btn-block" id="doShareTextBtn">${ICN.down} Download / Share as File</button>
-      <button class="btn btn-ghost btn-block" id="doCopyBtn">Copy Data (Clipboard)</button>
-    </div>
-    <div class="help-text" style="margin-top:12px">Agar "Print" is app mein kaam na kare (kuch installed apps par aisa ho sakta hai), to "Download / Share" ya "Copy" istemal karein — dono hamesha kaam karte hain.</div>`,
+    <div style="display:flex;flex-direction:column;gap:10px">${buttonsHtml}</div>
+    <div class="help-text" style="margin-top:12px">${standalone
+      ? 'Is installed app mein "Copy" sab se pukhta tareeqa hai — data copy kar ke WhatsApp/Notes mein paste kar dein.'
+      : 'Agar "Print" kaam na kare, to "Download / Share" ya "Copy" istemal karein — dono hamesha kaam karte hain.'}</div>`,
     (root)=>{
       $('#doPrintBtn', root).addEventListener('click', ()=>{
-        // Android WebView mein window.print() blob error deta hai, isliye direct download karo
-        if(isAndroidWebView()){
-          closeSheet();
-          const htmlContent = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${data.title}</title><style>body{font-family:Arial,sans-serif;padding:16px} table{width:100%;border-collapse:collapse;margin:12px 0} th,td{border:1px solid #ddd;padding:6px 8px;text-align:left;font-size:12px} th{background:#f5f5f5} h2{margin-top:20px}</style></head><body>${document.getElementById('printArea')?document.getElementById('printArea').innerHTML:''}<h1>GharSaz 360 — ${data.title}</h1>${data.sections.join('')}<p>Generated on ${new Date().toLocaleDateString()}</p></body></html>`;
-          // Render first to get correct HTML
-          renderPrintArea(data);
-          const finalHtml = document.getElementById('printArea').innerHTML;
-          const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${data.title}</title><style>body{font-family:Arial,sans-serif;padding:16px} table{width:100%;border-collapse:collapse;margin:12px 0} th,td{border:1px solid #ddd;padding:6px 8px;text-align:left;font-size:12px} th{background:#f5f5f5} h2{margin-top:20px}</style></head><body>${finalHtml}</body></html>`;
-          downloadFile(`GharSaz360-${data.title.replace(/\s+/g,'-')}-${todayISO()}.html`, fullHtml, 'text/html');
-          toast('PDF ke liye HTML file download ho rahi hai — usko open karke Print to PDF kar sakte hain');
-          return;
-        }
         closeSheet();
         renderPrintArea(data);
         setTimeout(()=>{
           try{ window.print(); }
-          catch(e){ toast('Print is app mein available nahi — "Download/Share" ya "Copy" try karein'); }
+          catch(e){ toast('Print is app mein available nahi — "Copy" ya "Download" try karein'); }
         }, 150);
       });
       $('#doShareTextBtn', root).addEventListener('click', ()=>{
@@ -3290,9 +3258,8 @@ function exportPDF(){
           toast('Copy ho gaya');
           closeSheet();
         }catch(e){
-          openSheet(`${sheetHeader('Copy Manually')}
-            <textarea readonly onclick="this.select()" style="width:100%;min-height:320px;font-family:monospace;font-size:12px;padding:10px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface-2)">${escapeHtml(text)}</textarea>
-            <div class="help-text">Textbox par tap karein — sab select ho jayega, phir copy karein.</div>`);
+          closeSheet();
+          showCopyFallback(data.title, text);
         }
       });
     });
