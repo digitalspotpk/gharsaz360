@@ -7,14 +7,13 @@
    returning users get the update.
    ========================================================================== */
 
-const CACHE_VERSION = 'gharsaz360-v1.4.0';
+const CACHE_VERSION = 'gharsaz360-v1.5.0';
 const APP_SHELL = [
   './',
   './index.html',
   './app.js',
   './manifest.json',
   './privacy-policy.html',
-  './guide.html',
   './404.html',
   './icon-192.png',
   './icon-512.png',
