@@ -703,6 +703,26 @@ function sheetHeader(title){
     <button class="icon-btn" onclick="closeSheet()">${ICN.close}</button></div>`;
 }
 
+/* Custom in-app confirmation dialog — used everywhere instead of the
+ * native confirm(). Android WebViews do NOT show anything for
+ * window.confirm() unless the host app explicitly implements
+ * WebChromeClient.onJsConfirm(); by default it silently returns false,
+ * which made every "Delete" button and the paste-restore flow appear to
+ * do nothing. This dialog is pure in-page UI, so it works identically in
+ * every environment: browser, TWA, or a bare installed WebView. */
+function confirmDialog(message, onConfirm, onCancel){
+  openSheet(`${sheetHeader('Please Confirm')}
+    <div style="font-size:14px;color:var(--text);line-height:1.6;margin-bottom:22px">${escapeHtml(message)}</div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-outline btn-block" id="confirmCancelBtn">Cancel</button>
+      <button class="btn btn-danger btn-block" id="confirmOkBtn">Confirm</button>
+    </div>`,
+    (root)=>{
+      $('#confirmCancelBtn', root).addEventListener('click', ()=>{ closeSheet(); if(onCancel) onCancel(); });
+      $('#confirmOkBtn', root).addEventListener('click', ()=>{ closeSheet(); if(onConfirm) onConfirm(); });
+    });
+}
+
 /* Generic field renderer used by every simple CRUD module */
 function renderField(f, val){
   val = val===undefined||val===null ? '' : val;
@@ -991,10 +1011,10 @@ function openGenericForm(arrayKey, editId){
       });
       if(editItem){
         $('#delBtn', root).addEventListener('click', ()=>{
-          if(confirm('Delete this entry?')){
+          confirmDialog('Delete this entry?', ()=>{
             DATA[arrayKey] = DATA[arrayKey].filter(x=>x.id!==editId);
             saveData(); closeSheet(); toast('Deleted'); renderRoute();
-          }
+          });
         });
       }
     });
@@ -1164,7 +1184,7 @@ function openBudgetForm(editId){
         saveData(); closeSheet(); toast('Budget saved'); renderRoute();
       });
       if(editItem) $('#delB', root).addEventListener('click', ()=>{
-        if(confirm('Delete budget?')){ DATA.budgets = DATA.budgets.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute(); }
+        confirmDialog('Delete budget?', ()=>{ DATA.budgets = DATA.budgets.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute(); });
       });
     });
 }
@@ -1192,7 +1212,7 @@ function openIncomeForm(editId){
         saveData(); closeSheet(); toast('Income saved'); renderRoute();
       });
       if(editItem) $('#delI', root).addEventListener('click', ()=>{
-        if(confirm('Delete?')){ DATA.incomes = DATA.incomes.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute(); }
+        confirmDialog('Delete?', ()=>{ DATA.incomes = DATA.incomes.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute(); });
       });
     });
 }
@@ -1269,7 +1289,7 @@ function openExpenseForm(editId){
         saveData(); closeSheet(); toast('Expense saved'); renderRoute();
       });
       if(editItem) $('#delE', root).addEventListener('click', ()=>{
-        if(confirm('Delete expense?')){ DATA.expenses = DATA.expenses.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute(); }
+        confirmDialog('Delete expense?', ()=>{ DATA.expenses = DATA.expenses.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute(); });
       });
     });
 }
@@ -1342,9 +1362,9 @@ function openPropertyForm(editId){
         saveData(); closeSheet(); toast('Property saved'); renderRoute();
       });
       if(editItem) $('#delP', root).addEventListener('click', ()=>{
-        if(confirm('Delete property? Linked tenants will remain but unlinked.')){
+        confirmDialog('Delete property? Linked tenants will remain but unlinked.', ()=>{
           DATA.properties = DATA.properties.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute();
-        }
+        });
       });
     });
 }
@@ -1376,7 +1396,7 @@ function openTenantForm(editId){
         saveData(); closeSheet(); toast('Tenant saved'); renderRoute();
       });
       if(editItem) $('#delT', root).addEventListener('click', ()=>{
-        if(confirm('Delete tenant?')){ DATA.tenants = DATA.tenants.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute(); }
+        confirmDialog('Delete tenant?', ()=>{ DATA.tenants = DATA.tenants.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute(); });
       });
     });
 }
@@ -1437,7 +1457,7 @@ function openRentPaymentForm(editId){
       saveData(); closeSheet(); toast('Payment saved'); renderRoute();
     });
     if(editItem) $('#delRP', root).addEventListener('click', ()=>{
-      if(confirm('Delete this payment record?')){ DATA.rentPayments = DATA.rentPayments.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute(); }
+      confirmDialog('Delete this payment record?', ()=>{ DATA.rentPayments = DATA.rentPayments.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute(); });
     });
   });
 }
@@ -1563,11 +1583,11 @@ function openUdharForm(editId){
         saveData(); closeSheet(); toast('Saved'); renderRoute();
       });
       if(editItem) $('#delU', root).addEventListener('click', ()=>{
-        if(confirm('Delete this contact and all its transactions?')){
+        confirmDialog('Delete this contact and all its transactions?', ()=>{
           DATA.udhars = DATA.udhars.filter(x=>x.id!==editId);
           DATA.udharTx = DATA.udharTx.filter(x=>x.udharId!==editId);
           saveData(); closeSheet(); renderRoute();
-        }
+        });
       });
     });
 }
@@ -1678,7 +1698,7 @@ function openProjectForm(editId){
         saveData(); closeSheet(); toast('Project saved'); renderRoute();
       });
       if(editItem) $('#delCP', root).addEventListener('click', ()=>{
-        if(confirm('Delete project?')){ DATA.constructionProjects = DATA.constructionProjects.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute(); }
+        confirmDialog('Delete project?', ()=>{ DATA.constructionProjects = DATA.constructionProjects.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute(); });
       });
     });
 }
@@ -1704,7 +1724,7 @@ function openLabourerForm(editId){
         saveData(); closeSheet(); toast('Saved'); renderRoute();
       });
       if(editItem) $('#delL', root).addEventListener('click', ()=>{
-        if(confirm('Delete worker?')){ DATA.labourers = DATA.labourers.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute(); }
+        confirmDialog('Delete worker?', ()=>{ DATA.labourers = DATA.labourers.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute(); });
       });
     });
 }
@@ -1801,10 +1821,10 @@ function openEmployeeForm(editId){
         saveData(); closeSheet(); toast('Employee saved'); renderRoute();
       });
       if(editItem) $('#delEmp', root).addEventListener('click', ()=>{
-        if(confirm('Delete this employee? Their attendance/advance/payment history will remain but unlinked.')){
+        confirmDialog('Delete this employee? Their attendance/advance/payment history will remain but unlinked.', ()=>{
           DATA.employees = DATA.employees.filter(x=>x.id!==editId);
           saveData(); closeSheet(); renderRoute();
-        }
+        });
       });
     });
 }
@@ -1926,7 +1946,7 @@ function openSalaryPaymentForm(editId){
       saveData(); closeSheet(); toast('Salary payment saved'); renderRoute();
     });
     if(editItem) $('#delSP', root).addEventListener('click', ()=>{
-      if(confirm('Delete this payment record?')){ DATA.salaryPayments = DATA.salaryPayments.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute(); }
+      confirmDialog('Delete this payment record?', ()=>{ DATA.salaryPayments = DATA.salaryPayments.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute(); });
     });
   });
 }
@@ -2066,10 +2086,10 @@ function openLabourWorkerForm(editId){
         saveData(); closeSheet(); toast('Worker saved'); renderRoute();
       });
       if(editItem) $('#delLW', root).addEventListener('click', ()=>{
-        if(confirm('Delete this worker? Their history will remain but unlinked.')){
+        confirmDialog('Delete this worker? Their history will remain but unlinked.', ()=>{
           DATA.labourWorkers = DATA.labourWorkers.filter(x=>x.id!==editId);
           saveData(); closeSheet(); renderRoute();
-        }
+        });
       });
     });
 }
@@ -2192,7 +2212,7 @@ function openLabourPaymentForm(editId){
       saveData(); closeSheet(); toast('Payment saved'); renderRoute();
     });
     if(editItem) $('#delLP', root).addEventListener('click', ()=>{
-      if(confirm('Delete this payment record?')){ DATA.labourPayments = DATA.labourPayments.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute(); }
+      confirmDialog('Delete this payment record?', ()=>{ DATA.labourPayments = DATA.labourPayments.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute(); });
     });
   });
 }
@@ -2573,7 +2593,7 @@ function openFuelForm(editId){
         saveData(); closeSheet(); toast('Fuel entry saved'); renderRoute();
       });
       if(editItem) $('#delF', root).addEventListener('click', ()=>{
-        if(confirm('Delete entry?')){ DATA.fuelLogs = DATA.fuelLogs.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute(); }
+        confirmDialog('Delete entry?', ()=>{ DATA.fuelLogs = DATA.fuelLogs.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute(); });
       });
     });
 }
@@ -2825,10 +2845,10 @@ async function viewVaultItem(id){
         <button class="btn btn-primary btn-block" onclick="closeSheet()">Close</button>
       </div>`, (root)=>{
         $('#delVault', root).addEventListener('click', ()=>{
-          if(confirm('Delete this vault item?')){
+          confirmDialog('Delete this vault item?', ()=>{
             DATA.vaultItems = DATA.vaultItems.filter(x=>x.id!==id);
             saveData(); closeSheet(); renderRoute();
-          }
+          });
         });
       });
   }catch(e){ toast('Decrypt fail — vault re-unlock karein'); VAULT_KEY=null; renderRoute(); }
@@ -3061,24 +3081,37 @@ function openPasteRestore(){
       $('#pasteRestoreBtn', root).addEventListener('click', ()=>{
         const text = $('#pasteArea', root).value.trim();
         if(!text){ toast('Pehle backup text paste karein'); return; }
-        if(!confirm('Ye mojooda data ko overwrite kar dega. Aage badhein?')) return;
-        if(restoreFromJSON(text)) closeSheet();
+        confirmDialog('Ye mojooda data ko overwrite kar dega. Aage badhein?', ()=>{
+          if(restoreFromJSON(text)) closeSheet();
+        });
       });
     });
 }
 function wipeAllData(){
-  if(confirm('Yeh permanent hai — sab data delete ho jayega. Pakka?')){
-    if(confirm('Aakhri tasdeeq: Sab kuch delete karna hai?')){
+  confirmDialog('Yeh permanent hai — sab data delete ho jayega. Pakka?', ()=>{
+    confirmDialog('Aakhri tasdeeq: Sab kuch delete karna hai?', ()=>{
       DATA = defaultState(); VAULT_KEY = null; saveData(); toast('All data cleared'); renderRoute();
-    }
-  }
+    });
+  });
 }
 function renderSettings(){
   const dataSize = new Blob([JSON.stringify(DATA)]).size;
+  const hasBridge = !!(window.AndroidBridge && typeof window.AndroidBridge.saveFile === 'function');
+  const bridgeStatus = hasBridge
+    ? `<div class="badge green">Connected</div>`
+    : `<div class="badge amber">Not Connected (using web fallback)</div>`;
   let html = `
   <div class="card">
     <div class="card-title">Storage Used</div>
     <div class="card-sub" style="margin-top:4px">${(dataSize/1024).toFixed(1)} KB stored locally on this device — nothing leaves your phone.</div>
+  </div>
+
+  <div class="card card-row" style="justify-content:space-between">
+    <div>
+      <div class="card-title">Native Android Bridge</div>
+      <div class="card-sub" style="margin-top:2px">${hasBridge ? 'File save/import Android code se ho raha hai (sab se pukhta).' : 'MainActivity.kt bridge detect nahi hui — download/import web-fallback (Share/Copy) se ho rahe hain.'}</div>
+    </div>
+    ${bridgeStatus}
   </div>
 
   <div class="section-title">Backup &amp; Restore</div>
