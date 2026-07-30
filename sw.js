@@ -1,5 +1,5 @@
 /* ==========================================================================
-   GharSaz 360 — Service Worker
+   GharSaz 360 â€” Service Worker
    Strategy: Cache-First for the app shell (works 100% offline after the
    first successful load), with a network-falling-back-to-cache approach
    for anything not pre-cached, and automatic cleanup of old caches on
@@ -7,7 +7,7 @@
    returning users get the update.
    ========================================================================== */
 
-const CACHE_VERSION = 'gharsaz360-v1.8.0';
+const CACHE_VERSION = 'gharsaz360-v1.9.0';
 const APP_SHELL = [
   './',
   './index.html',
@@ -58,7 +58,7 @@ self.addEventListener('fetch', (event) => {
         .catch(() => {
           // Offline and not cached: fall back to the app shell for navigations.
           if (req.mode === 'navigate') return caches.match('./index.html');
-          return new Response('Offline — resource not cached.', { status: 503, statusText: 'Offline' });
+          return new Response('Offline â€” resource not cached.', { status: 503, statusText: 'Offline' });
         });
     })
   );
