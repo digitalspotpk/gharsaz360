@@ -1029,7 +1029,20 @@ function computeMonthTotals(mKey){
   const inc = DATA.incomes.filter(i=>monthKey(i.date)===mKey).reduce((s,i)=>s+Number(i.amount||0),0);
   return {exp, inc};
 }
+const DEFAULT_QUICK_ACCESS = ['expenses','rent','udhar','salary','zakat','vehicle','goals','vault'];
+let dashboardTab = 'home';
 function renderDashboard(){
+  let tabsHtml = `<div class="chip-row">
+    <div class="chip ${dashboardTab==='home'?'active':''}" data-dtab="home">Dashboard</div>
+    <div class="chip ${dashboardTab==='overview'?'active':''}" data-dtab="overview">Financial Overview</div>
+  </div>`;
+
+  if(dashboardTab==='overview'){
+    $('#viewRoot').innerHTML = tabsHtml + renderFinancialOverviewHTML();
+    $$('.chip[data-dtab]').forEach(c=>c.addEventListener('click', ()=>{ dashboardTab = c.dataset.dtab; renderDashboard(); }));
+    return;
+  }
+
   const {exp, inc} = computeMonthTotals();
   const pendingRent = DATA.rentPayments.filter(p=>p.status!=='Paid').length;
   const pendingUdhar = DATA.udhars.filter(u=>udharBalance(u)!==0).length;
@@ -1062,7 +1075,7 @@ function renderDashboard(){
     return d!==null && d<=7;
   }).length;
 
-  let html = `
+  let html = tabsHtml + `
   <div class="grid-2">
     <div class="stat-card">
       <div class="stat-label">This Month Expense</div>
@@ -1104,14 +1117,43 @@ function renderDashboard(){
     html += `<div class="card">` + DATA.budgets.slice(0,3).map(budgetRow).join('') + `</div>`;
   }
 
-  html += `<div class="section-title">Quick Access</div><div class="grid-4">`;
-  ['expenses','rent','udhar','salary','zakat','vehicle','goals','vault','settings'].forEach(id=>{
+  const qa = (SETTINGS.quickAccess && SETTINGS.quickAccess.length) ? SETTINGS.quickAccess : DEFAULT_QUICK_ACCESS;
+  html += `<div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
+    <span>Quick Access</span>
+    <button class="icon-btn" style="width:30px;height:30px" onclick="openQuickAccessEditor()">${ICN.edit}</button>
+  </div><div class="grid-4">`;
+  qa.forEach(id=>{
     const m = ALL_MODULES.find(x=>x.id===id);
-    html += moduleTile(m);
+    if(m) html += moduleTile(m);
   });
   html += `</div>`;
 
   $('#viewRoot').innerHTML = html;
+  $$('.chip[data-dtab]').forEach(c=>c.addEventListener('click', ()=>{ dashboardTab = c.dataset.dtab; renderDashboard(); }));
+}
+function openQuickAccessEditor(){
+  const current = (SETTINGS.quickAccess && SETTINGS.quickAccess.length) ? SETTINGS.quickAccess : DEFAULT_QUICK_ACCESS;
+  const selectable = ALL_MODULES.filter(m=>m.id!=='dashboard' && m.id!=='more');
+  openSheet(`${sheetHeader('Customize Quick Access')}
+    <div class="help-text" style="margin-bottom:12px">Jo modules Dashboard ke Quick Access mein dikhne chahiye unhe select karein (max 8).</div>
+    <div style="display:flex;flex-direction:column;gap:8px;max-height:52vh;overflow-y:auto">
+      ${selectable.map(m=>`
+        <label class="card-row" style="padding:10px 12px;border:1.5px solid var(--border);border-radius:12px;cursor:pointer">
+          <input type="checkbox" value="${m.id}" ${current.includes(m.id)?'checked':''} class="qaCheck" style="width:18px;height:18px;flex:none">
+          <div class="ic" style="background:${m.color}20;color:${m.color};width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex:none">${icon(m.icon)}</div>
+          <span style="font-size:13px;font-weight:600">${m.label}</span>
+        </label>`).join('')}
+    </div>
+    <button class="btn btn-primary btn-block" style="margin-top:14px" id="saveQABtn">Save</button>`,
+    (root)=>{
+      $('#saveQABtn', root).addEventListener('click', ()=>{
+        const checked = $$('.qaCheck:checked', root).map(el=>el.value);
+        if(!checked.length){ toast('Kam az kam 1 module select karein'); return; }
+        if(checked.length>8){ toast('Zyada se zyada 8 modules select karein'); return; }
+        SETTINGS.quickAccess = checked;
+        saveSettings(); closeSheet(); toast('Quick Access update ho gaya'); renderRoute();
+      });
+    });
 }
 function reminderRow(ic,color,text,onclick){
   return `<div class="card-row" style="padding:6px 0;cursor:pointer" onclick="(${onclick.toString()})()">
@@ -1127,6 +1169,147 @@ function emptyState(ic,title,sub,route){
     ${route?`<button class="btn btn-primary" onclick="handleFab('${route}')">+ Add Now</button>`:''}
   </div>`;
 }
+/* ---------------------------------------------------------------------- *
+ * FINANCIAL OVERVIEW — section-wise In/Out/Net summary across every
+ * financial module, with an overall profit/loss headline.
+ * ---------------------------------------------------------------------- */
+function computeModuleFinancials(){
+  const results = [];
+  const mKey = monthKey();
+
+  const incThis = DATA.incomes.filter(i=>monthKey(i.date)===mKey).reduce((s,i)=>s+Number(i.amount||0),0);
+  const expThis = DATA.expenses.filter(e=>monthKey(e.date)===mKey).reduce((s,e)=>s+Number(e.amount||0),0);
+  if(DATA.incomes.length || DATA.expenses.length)
+    results.push({id:'expenses', label:'Expenses & Income', icon:'wallet', color:'#10b981', in:incThis, out:expThis, net:incThis-expThis, inLabel:'Income (mo)', outLabel:'Expense (mo)'});
+
+  if(DATA.budgets.length){
+    const totalEst = DATA.budgets.reduce((s,b)=>s+budgetEffective(b),0);
+    const totalSpentB = DATA.budgets.reduce((s,b)=>s+budgetSpent(b),0);
+    results.push({id:'budgets', label:'Budgets', icon:'wallet', color:'#0d9488', in:totalEst, out:totalSpentB, net:totalEst-totalSpentB, inLabel:'Effective Budget', outLabel:'Spent'});
+  }
+
+  if(DATA.rentPayments.length){
+    const totalRent = DATA.rentPayments.reduce((s,p)=>s+Number(p.amount||0),0);
+    const paidRent = DATA.rentPayments.filter(p=>p.status==='Paid').reduce((s,p)=>s+Number(p.amount||0),0);
+    results.push({id:'rent', label:'House Rent', icon:'key', color:'#0ea5e9', in:paidRent, out:totalRent-paidRent, net:paidRent-(totalRent-paidRent), inLabel:'Collected', outLabel:'Pending'});
+  }
+
+  if(DATA.udhars.length){
+    const receivable = DATA.udhars.reduce((s,u)=>s+Math.max(0,udharBalance(u)),0);
+    const payable = DATA.udhars.reduce((s,u)=>s+Math.max(0,-udharBalance(u)),0);
+    results.push({id:'udhar', label:'Udhar Khata', icon:'users', color:'#8b5cf6', in:receivable, out:payable, net:receivable-payable, inLabel:'Receivable', outLabel:'Payable'});
+  }
+
+  if(DATA.constructionProjects.length || DATA.materials.length){
+    const budget = DATA.constructionProjects.reduce((s,p)=>s+Number(p.budget||0),0);
+    const spend = DATA.materials.reduce((s,m)=>s+Number(m.amount||0),0) + DATA.labourers.reduce((s,l)=>s+labourerPayout(l),0);
+    results.push({id:'construction', label:'Construction', icon:'hammer', color:'#b45309', in:budget, out:spend, net:budget-spend, inLabel:'Budget', outLabel:'Spend'});
+  }
+
+  if(DATA.employees.length){
+    const payroll = DATA.employees.filter(e=>e.status!=='Inactive').reduce((s,e)=>s+Number(e.monthlySalary||0),0);
+    const advOut = DATA.salaryAdvances.filter(a=>!a.settled).reduce((s,a)=>s+Number(a.amount||0),0);
+    results.push({id:'salary', label:'Salary Management', icon:'briefcase', color:'#4f46e5', in:payroll, out:advOut, net:payroll-advOut, inLabel:'Payroll', outLabel:'Advances Out'});
+  }
+
+  if(DATA.labourWorkers.length){
+    const paidOut = DATA.labourPayments.reduce((s,p)=>s+Number(p.net||0),0);
+    const advOut = DATA.labourAdvances.filter(a=>!a.settled).reduce((s,a)=>s+Number(a.amount||0),0);
+    results.push({id:'labour', label:'Labour Management', icon:'hardhat', color:'#c2410c', in:paidOut, out:advOut, net:paidOut-advOut, inLabel:'Paid Out', outLabel:'Advances'});
+  }
+
+  if(DATA.loans.length){
+    const principal = DATA.loans.reduce((s,l)=>s+Number(l.principal||0),0);
+    const remaining = DATA.loans.reduce((s,l)=>s+Number(l.remaining!==undefined?l.remaining:l.principal||0),0);
+    results.push({id:'loans', label:'Loan / EMI', icon:'bank', color:'#1d4ed8', in:principal-remaining, out:remaining, net:(principal-remaining)-remaining, inLabel:'Paid Off', outLabel:'Remaining'});
+  }
+
+  if(DATA.bills.length){
+    const paid = DATA.bills.filter(b=>b.status==='Paid').reduce((s,b)=>s+Number(b.amount||0),0);
+    const unpaid = DATA.bills.filter(b=>b.status!=='Paid').reduce((s,b)=>s+Number(b.amount||0),0);
+    results.push({id:'bills', label:'Bill Reminders', icon:'bell', color:'#b45309', in:paid, out:unpaid, net:paid-unpaid, inLabel:'Paid', outLabel:'Unpaid'});
+  }
+
+  if(DATA.subscriptions.length){
+    const active = DATA.subscriptions.filter(s=>s.status!=='Cancelled');
+    const monthlyCost = active.reduce((s,x)=>s+Number(x.amount||0)/(x.billingCycle==='Yearly'?12:1),0);
+    results.push({id:'subscriptions', label:'Subscriptions', icon:'repeat', color:'#7c3aed', in:0, out:monthlyCost, net:-monthlyCost, inLabel:'—', outLabel:'Monthly Cost'});
+  }
+
+  if(DATA.insurancePolicies.length){
+    const premium = DATA.insurancePolicies.reduce((s,p)=>s+Number(p.premiumAmount||0),0);
+    const coverage = DATA.insurancePolicies.reduce((s,p)=>s+Number(p.coverageAmount||0),0);
+    results.push({id:'insurancePolicies', label:'Insurance', icon:'umbrella', color:'#0369a1', in:coverage, out:premium, net:coverage-premium, inLabel:'Coverage', outLabel:'Premium'});
+  }
+
+  if(DATA.charityRecords.length){
+    const given = DATA.charityRecords.reduce((s,c)=>s+Number(c.amount||0),0);
+    results.push({id:'zakat', label:'Zakat & Charity', icon:'moonstar', color:'#0f766e', in:0, out:given, net:-given, inLabel:'—', outLabel:'Given'});
+  }
+
+  if(DATA.events.length){
+    const budget = DATA.events.reduce((s,e)=>s+Number(e.budget||0),0);
+    const spend = DATA.eventItems.reduce((s,i)=>s+Number(i.amount||0),0);
+    results.push({id:'events', label:'Event Budgeter', icon:'calendarheart', color:'#db2777', in:budget, out:spend, net:budget-spend, inLabel:'Budget', outLabel:'Spent'});
+  }
+
+  if(DATA.goals.length){
+    const target = DATA.goals.reduce((s,g)=>s+Number(g.target||0),0);
+    const saved = DATA.goals.reduce((s,g)=>s+Number(g.saved||0),0);
+    results.push({id:'goals', label:'Savings Goals', icon:'target', color:'#0891b2', in:saved, out:Math.max(0,target-saved), net:saved-target, inLabel:'Saved', outLabel:'Remaining'});
+  }
+
+  if(DATA.fuelLogs.length){
+    const fuelCost = DATA.fuelLogs.reduce((s,f)=>s+Number(f.liters||0)*Number(f.rate||0),0);
+    results.push({id:'vehicle', label:'Vehicle Log', icon:'car', color:'#dc2626', in:0, out:fuelCost, net:-fuelCost, inLabel:'—', outLabel:'Fuel Cost'});
+  }
+
+  return results;
+}
+function renderFinancialOverviewHTML(){
+  const items = computeModuleFinancials();
+  const totalIn = items.reduce((s,i)=>s+i.in,0);
+  const totalOut = items.reduce((s,i)=>s+i.out,0);
+  const totalNet = totalIn-totalOut;
+
+  let html = `<div class="grid-2">
+    <div class="stat-card"><div class="stat-label">Total In (all modules)</div><div class="stat-value">${fmtMoney(totalIn)}</div></div>
+    <div class="stat-card danger"><div class="stat-label">Total Out (all modules)</div><div class="stat-value">${fmtMoney(totalOut)}</div></div>
+  </div>`;
+  html += `<div class="stat-card" style="background:linear-gradient(135deg,${totalNet>=0?'#065f46,#10b981':'#991b1b,#ef4444'});margin-top:12px">
+    <div class="stat-label">${totalNet>=0?'Overall Profit':'Overall Loss'}</div>
+    <div class="stat-value">${fmtMoney(Math.abs(totalNet))}</div>
+  </div>`;
+
+  html += `<div class="section-title">Section-wise Summary</div>`;
+  if(!items.length){
+    html += emptyState('wallet','Abhi koi financial data nahi','Kisi bhi module mein entry add karein to yahan summary dikhegi','');
+  } else {
+    html += `<div class="card">` + items.map(it=>{
+      const profit = it.net>=0;
+      return `<div style="padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="navigate('${it.id}')">
+        <div class="card-row" style="justify-content:space-between;margin-bottom:8px">
+          <div class="card-row">
+            <div class="avatar" style="background:${it.color}20;color:${it.color};width:34px;height:34px;border-radius:10px">${icon(it.icon)}</div>
+            <div style="font-weight:700;font-size:13.5px">${it.label}</div>
+          </div>
+          <span class="badge ${profit?'green':'red'}">${profit?'+':'-'}${fmtMoney(Math.abs(it.net))}</span>
+        </div>
+        <div class="grid-2" style="gap:8px">
+          <div style="background:var(--surface-2);padding:8px 10px;border-radius:8px">
+            <div style="font-size:10px;color:var(--text-dim)">${it.inLabel||'In'}</div>
+            <div style="font-size:13px;font-weight:700;color:#059669">${fmtMoney(it.in)}</div>
+          </div>
+          <div style="background:var(--surface-2);padding:8px 10px;border-radius:8px">
+            <div style="font-size:10px;color:var(--text-dim)">${it.outLabel||'Out'}</div>
+            <div style="font-size:13px;font-weight:700;color:#dc2626">${fmtMoney(it.out)}</div>
+          </div>
+        </div>
+      </div>`;
+    }).join('') + `</div>`;
+  }
+  return html;
+}
 function moduleTile(m){
   return `<div class="module-tile" onclick="navigate('${m.id}')">
     <div class="ic" style="background:${m.color}20;color:${m.color}">${icon(m.icon)}</div>
@@ -1140,12 +1323,36 @@ function moreGrid(){
 /* ---------------------------------------------------------------------- *
  * 9. BUDGETS & INCOME
  * ---------------------------------------------------------------------- */
+function budgetMonthSpent(b, mKey){
+  mKey = mKey || monthKey();
+  return DATA.expenses.filter(e=>e.budgetId===b.id && monthKey(e.date)===mKey)
+    .reduce((s,e)=>s+Number(e.amount||0),0);
+}
 function budgetSpent(b){
+  // Monthly budgets show THIS MONTH's spend (so the progress bar resets
+  // each month, matching how a monthly budget should behave). Yearly and
+  // One-time budgets keep a lifetime running total.
+  if(b.period === 'Monthly') return budgetMonthSpent(b, monthKey());
   return DATA.expenses.filter(e=>e.budgetId===b.id).reduce((s,e)=>s+Number(e.amount||0),0);
+}
+function previousMonthKey(mKey){
+  const parts = (mKey||monthKey()).split('-').map(Number);
+  const d = new Date(parts[0], parts[1]-2, 1);
+  return d.toISOString().slice(0,7);
+}
+function budgetCarryAmount(b){
+  if(b.carryForward !== 'Yes' || b.period !== 'Monthly') return 0;
+  const prevSpent = budgetMonthSpent(b, previousMonthKey(monthKey()));
+  return Number(b.estimated||0) - prevSpent; // positive = saved & carried in; negative = overspent, reduces this month
+}
+function budgetEffective(b){
+  return Number(b.estimated||0) + budgetCarryAmount(b);
 }
 function budgetRow(b){
   const spent = budgetSpent(b);
-  const pct = b.estimated? Math.min(100, Math.round(spent/b.estimated*100)) : 0;
+  const carry = budgetCarryAmount(b);
+  const effective = budgetEffective(b);
+  const pct = effective>0 ? Math.min(100, Math.round(spent/effective*100)) : 0;
   const level = pct>90?'red':pct>=70?'amber':'green';
   return `<div style="padding:10px 0;border-bottom:1px solid var(--border)" onclick="openGenericBudget('${b.id}')">
     <div class="card-row" style="justify-content:space-between;margin-bottom:8px">
@@ -1156,7 +1363,8 @@ function budgetRow(b){
       <div class="badge ${level}">${pct}%</div>
     </div>
     <div class="progress ${level}"><div style="width:${pct}%"></div></div>
-    <div class="card-sub" style="margin-top:6px">${fmtMoney(spent)} spent of ${fmtMoney(b.estimated)}</div>
+    <div class="card-sub" style="margin-top:6px">${fmtMoney(spent)} spent of ${fmtMoney(effective)}</div>
+    ${carry!==0?`<div class="card-sub" style="margin-top:2px;color:${carry>0?'#059669':'#dc2626'};font-weight:700">${carry>0?'+':'-'}${fmtMoney(Math.abs(carry))} carried from last month (${carry>0?'aap ne bachaya tha':'overspend hua tha'})</div>`:''}
   </div>`;
 }
 function openGenericBudget(id){ openBudgetForm(id); }
@@ -1167,10 +1375,12 @@ function openBudgetForm(editId){
     {key:'category', label:'Type', type:'select', options:['Monthly Home','Special Event','Emergency Fund','Other']},
     {key:'estimated', label:'Estimated Amount (Rs)', type:'number', required:true},
     {key:'period', label:'Period', type:'select', options:['Monthly','Yearly','One-time']},
+    {key:'carryForward', label:'Carry Forward Savings/Overspend? (sirf Monthly ke liye)', type:'select', options:['No','Yes']},
   ];
   openSheet(`${sheetHeader((editItem?'Edit ':'New ')+'Budget')}
     <form id="bForm">
-      ${fields.map(f=>renderField(f, editItem?editItem[f.key]:'')).join('')}
+      ${fields.map(f=>renderField(f, editItem?editItem[f.key]:(f.key==='carryForward'?'No':''))).join('')}
+      <div class="help-text" style="margin-top:-8px;margin-bottom:12px">Agar "Yes" karein, to pichle mahine ki bachat agle mahine ke budget mein add ho jayegi (ya overspend hone par kam ho jayegi).</div>
       <div style="display:flex;gap:10px">
         ${editItem?`<button type="button" class="btn btn-danger" id="delB">${ICN.trash}</button>`:''}
         <button type="submit" class="btn btn-primary btn-block">${editItem?'Update':'Create Budget'}</button>
