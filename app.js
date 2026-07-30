@@ -69,6 +69,9 @@ function fmtMoney(n){
   n = Number(n)||0;
   return 'Rs ' + n.toLocaleString('en-PK', {maximumFractionDigits:0});
 }
+function sortByDateDesc(arr, field){
+  return arr.slice().sort((a,b)=> String(b[field]||'').localeCompare(String(a[field]||'')));
+}
 function fmtDate(d){
   if(!d) return '—';
   const dt = new Date(d);
@@ -107,6 +110,19 @@ function csvEscape(s){
 function pdfEscape(s){
   return String(s).replace(/[^\x20-\x7E]/g,'?').replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');
 }
+function pdfStringToBlob(body){
+  // PDF byte offsets in the xref table are computed against body.length
+  // (JS string length = number of UTF-16 code units). If we hand that
+  // string straight to `new Blob([body])`, the browser re-encodes it as
+  // UTF-8, and any non-ASCII character would shift every byte offset
+  // after it — silently corrupting the file. Converting to a raw
+  // Uint8Array (one byte per char code) guarantees 1 char = 1 byte, so
+  // the offsets we calculated stay valid. All PDF syntax + pdfEscape'd
+  // text is already restricted to the 0-255 range, so this is safe.
+  const bytes = new Uint8Array(body.length);
+  for(let i=0;i<body.length;i++) bytes[i] = body.charCodeAt(i) & 0xFF;
+  return new Blob([bytes], {type:'application/pdf'});
+}
 function wrapLine(line, maxChars){
   if(line.length<=maxChars) return [line];
   const out = [];
@@ -119,6 +135,163 @@ function wrapLine(line, maxChars){
   }
   if(remaining) out.push(remaining);
   return out;
+}
+function hexToRgb01(hex){
+  hex = hex.replace('#','');
+  return [parseInt(hex.slice(0,2),16)/255, parseInt(hex.slice(2,4),16)/255, parseInt(hex.slice(4,6),16)/255];
+}
+function pdfTruncate(s, maxChars){
+  s = String(s??'');
+  if(s.length<=maxChars) return s;
+  return maxChars>2 ? s.slice(0,maxChars-2)+'..' : s.slice(0,maxChars);
+}
+
+/* ---------------------------------------------------------------------- *
+ * ADVANCED LEDGER PDF — colorful, statement-style PDF with a branded
+ * header band, colored summary/total boxes, colored section headers and
+ * alternating row shading. Pure JS, zero dependencies, multi-page with
+ * automatic pagination and page numbers.
+ * ---------------------------------------------------------------------- */
+function buildLedgerPDF(data){
+  const PAGE_W = 612, PAGE_H = 792, MARGIN = 36;
+  const BOTTOM = 46;
+  const GREEN = hexToRgb01('#059669'), GREEN_DARK = hexToRgb01('#065f46');
+  const GRAY = [0.42,0.45,0.44], LGRAY = [0.95,0.96,0.95], WHITE = [1,1,1], BLACK = [0.12,0.14,0.13];
+
+  function fillOp(c){ return `${c[0].toFixed(3)} ${c[1].toFixed(3)} ${c[2].toFixed(3)} rg`; }
+  function rect(x,y,w,h,color){ return `${fillOp(color)}\n${x.toFixed(1)} ${y.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)} re f\n`; }
+  function text(x,y,str,font,size,color){
+    return `BT ${fillOp(color)} /${font} ${size} Tf 1 0 0 1 ${x.toFixed(1)} ${y.toFixed(1)} Tm (${pdfEscape(str)}) Tj ET\n`;
+  }
+  function lightTint(color){ return color.map(c=> c + (1-c)*0.87); }
+
+  const pagesOps = [];
+  let ops = '';
+  let y = 0;
+  let pageIndex = 0;
+
+  function startFirstPage(){
+    ops = '';
+    ops += rect(0, PAGE_H-78, PAGE_W, 78, GREEN);
+    ops += text(MARGIN, PAGE_H-40, data.title, 'F2', 17, WHITE);
+    ops += text(MARGIN, PAGE_H-58, `GharSaz 360  -  Generated ${fmtDate(todayISO())}`, 'F1', 9, WHITE);
+    y = PAGE_H-100;
+  }
+  function startNewPage(){
+    pagesOps.push(ops);
+    pageIndex++;
+    ops = '';
+    ops += rect(0, PAGE_H-40, PAGE_W, 40, GREEN_DARK);
+    ops += text(MARGIN, PAGE_H-26, `${data.title} (continued)`, 'F2', 11, WHITE);
+    y = PAGE_H-58;
+  }
+  function ensure(h){ if(y-h < BOTTOM) startNewPage(); }
+
+  startFirstPage();
+
+  // Summary boxes (max 3 per row)
+  if(data.summary && data.summary.length){
+    ensure(64);
+    const items = data.summary.slice(0,3);
+    const n = items.length;
+    const gap = 10;
+    const boxW = (PAGE_W - 2*MARGIN - (n-1)*gap)/n;
+    const boxH = 48;
+    const by = y - boxH;
+    items.forEach((s,i)=>{
+      const bx = MARGIN + i*(boxW+gap);
+      const color = hexToRgb01(s.color||'#059669');
+      ops += rect(bx, by, boxW, boxH, lightTint(color));
+      ops += text(bx+8, by+boxH-15, pdfTruncate(s.label, Math.floor(boxW/4.2)), 'F1', 7.5, GRAY);
+      ops += text(bx+8, by+10, pdfTruncate(s.value, Math.floor(boxW/6)), 'F2', 13, color);
+    });
+    y -= (boxH + 16);
+  }
+
+  if(data.note){
+    ensure(16);
+    ops += text(MARGIN, y-10, pdfTruncate(data.note, 110), 'F1', 8, GRAY);
+    y -= 20;
+  }
+
+  data.sections.forEach(sec=>{
+    ensure(22);
+    ops += rect(MARGIN, y-17, PAGE_W-2*MARGIN, 19, GREEN_DARK);
+    ops += text(MARGIN+7, y-12, sec.title, 'F2', 10, WHITE);
+    y -= 23;
+
+    if(!sec.rows.length){
+      ensure(16);
+      ops += text(MARGIN+4, y-10, 'Koi record nahi mila.', 'F1', 8.5, GRAY);
+      y -= 20;
+      return;
+    }
+
+    const cols = sec.headers.length;
+    const tableW = PAGE_W - 2*MARGIN;
+    const colW = tableW/cols;
+    const rowH = 15;
+    const maxChars = Math.max(4, Math.floor(colW/3.9));
+
+    ensure(rowH+2);
+    ops += rect(MARGIN, y-rowH, tableW, rowH, LGRAY);
+    sec.headers.forEach((h,ci)=>{
+      ops += text(MARGIN+ci*colW+5, y-rowH+5, pdfTruncate(h,maxChars), 'F2', 7.5, GREEN_DARK);
+    });
+    y -= rowH;
+
+    sec.rows.forEach((row,ri)=>{
+      ensure(rowH);
+      if(ri%2===1) ops += rect(MARGIN, y-rowH, tableW, rowH, LGRAY);
+      row.forEach((cell,ci)=>{
+        ops += text(MARGIN+ci*colW+5, y-rowH+5, pdfTruncate(cell,maxChars), 'F1', 7.5, BLACK);
+      });
+      y -= rowH;
+    });
+    y -= 12;
+  });
+
+  pagesOps.push(ops);
+  const totalPages = pagesOps.length;
+
+  // Footer with page numbers on every page
+  pagesOps.forEach((pageOps, idx)=>{
+    pagesOps[idx] = pageOps
+      + rect(MARGIN, 30, PAGE_W-2*MARGIN, 0.75, [0.85,0.87,0.86])
+      + text(PAGE_W/2-70, 18, `Generated by GharSaz 360 - 100% Offline App`, 'F1', 7, GRAY)
+      + text(PAGE_W-MARGIN-42, 18, `Page ${idx+1} of ${totalPages}`, 'F1', 7, GRAY);
+  });
+
+  // ---- Assemble PDF object structure ----
+  const pageObjIds = [], contentObjIds = [];
+  let nextId = 3;
+  pagesOps.forEach(()=>{ pageObjIds.push(nextId++); contentObjIds.push(nextId++); });
+  const fontRegId = nextId++, fontBoldId = nextId++;
+
+  let body = '%PDF-1.4\n';
+  const offsets = {};
+  function addObj(id, content){ offsets[id] = body.length; body += `${id} 0 obj\n${content}\nendobj\n`; }
+
+  addObj(1, `<< /Type /Catalog /Pages 2 0 R >>`);
+  addObj(2, `<< /Type /Pages /Kids [${pageObjIds.map(id=>id+' 0 R').join(' ')}] /Count ${pagesOps.length} >>`);
+
+  pagesOps.forEach((pageOps, idx)=>{
+    const pid = pageObjIds[idx], cid = contentObjIds[idx];
+    addObj(pid, `<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 ${fontRegId} 0 R /F2 ${fontBoldId} 0 R >> >> /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Contents ${cid} 0 R >>`);
+    addObj(cid, `<< /Length ${pageOps.length} >>\nstream\n${pageOps}\nendstream`);
+  });
+
+  addObj(fontRegId, `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>`);
+  addObj(fontBoldId, `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>`);
+
+  const xrefStart = body.length;
+  const totalObjs = fontBoldId;
+  let xref = `xref\n0 ${totalObjs+1}\n0000000000 65535 f \n`;
+  for(let id=1; id<=totalObjs; id++) xref += String(offsets[id]||0).padStart(10,'0') + ' 00000 n \n';
+  body += xref;
+  body += `trailer\n<< /Size ${totalObjs+1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+
+  return pdfStringToBlob(body);
 }
 function buildSimplePDF(title, bodyText){
   const rawLines = (title ? [title, ''] : []).concat(bodyText.split('\n'));
@@ -165,9 +338,21 @@ function buildSimplePDF(title, bodyText){
   body += xref;
   body += `trailer\n<< /Size ${totalObjs+1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
 
-  return new Blob([body], {type:'application/pdf'});
+  return pdfStringToBlob(body);
 }
 
+function blobToBase64(blob){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      const dataUrl = reader.result;
+      const base64 = dataUrl.slice(dataUrl.indexOf(',')+1);
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
 function isStandaloneApp(){
   try{
     return window.matchMedia('(display-mode: standalone)').matches
@@ -209,6 +394,20 @@ function showCopyFallback(filename, content){
 async function downloadBlob(filename, blob, textFallback){
   const mime = blob.type || 'application/octet-stream';
   const standalone = isStandaloneApp();
+
+  // 0. Native Android bridge — if this app was built in Android Studio
+  // with the AndroidBridge JavaScript interface (see the provided
+  // MainActivity.kt), this saves the file directly to the device's
+  // Downloads folder using native code. This is the most reliable path
+  // for an installed app since it doesn't depend on any web-platform
+  // download/share API working inside the WebView at all.
+  if(window.AndroidBridge && typeof window.AndroidBridge.saveFile === 'function'){
+    try{
+      const base64 = await blobToBase64(blob);
+      const ok = window.AndroidBridge.saveFile(filename, base64, mime);
+      if(ok !== false){ toast(filename+' Downloads folder mein save ho gaya'); return; }
+    }catch(e){ console.warn('AndroidBridge.saveFile failed:', e); }
+  }
 
   // 1. Web Share API — works well even inside installed apps when supported.
   try{
@@ -273,6 +472,10 @@ async function downloadFile(filename, content, mime){
 async function downloadPDF(filename, title, bodyText){
   const blob = buildSimplePDF(title, bodyText);
   await downloadBlob(filename, blob, bodyText);
+}
+async function downloadLedgerPDF(filename, printData){
+  const blob = buildLedgerPDF(printData);
+  await downloadBlob(filename, blob, printDataToText(printData));
 }
 
 /* ---------------------------------------------------------------------- *
@@ -1008,7 +1211,7 @@ function renderBudgets(){
   if(!DATA.incomes.length){
     html += emptyState('wallet','Koi income record nahi','Salary, rent ya business income add karein');
   } else {
-    html += `<div class="card">` + DATA.incomes.slice().reverse().map(i=>`
+    html += `<div class="card">` + sortByDateDesc(DATA.incomes, 'date').map(i=>`
       <div class="list-item" onclick="openIncomeForm('${i.id}')">
         <div class="avatar" style="background:#d1fae5;color:#065f46">${icon('wallet')}</div>
         <div class="meta"><div class="t">${escapeHtml(i.source)}</div><div class="s">${fmtDate(i.date)} ${i.notes?'· '+escapeHtml(i.notes):''}</div></div>
@@ -1101,7 +1304,7 @@ function renderExpenses(){
     ${Object.keys(CATEGORY_TREE).map(c=>`<div class="chip ${expenseFilter===c?'active':''}" data-f="${c}">${c}</div>`).join('')}
   </div>`;
 
-  const list = monthExpenses.filter(e=>expenseFilter==='All'||e.category===expenseFilter).slice().reverse();
+  const list = monthExpenses.filter(e=>expenseFilter==='All'||e.category===expenseFilter).sort((a,b)=> String(b.date||'').localeCompare(String(a.date||'')));
   html += `<div class="section-title">Recent Entries</div>`;
   html += list.length ? `<div class="card">${list.map(e=>`
       <div class="list-item" onclick="openExpenseForm('${e.id}')">
@@ -1312,7 +1515,7 @@ function renderRent(){
   }
 
   html += `<div class="section-title">Recent Payments</div>`;
-  const pays = DATA.rentPayments.slice().reverse();
+  const pays = sortByDateDesc(DATA.rentPayments, 'month');
   if(!pays.length){
     html += emptyState('key','Koi payment record nahi','');
   } else {
@@ -1398,7 +1601,7 @@ function openUdharTxForm(udharId){
 }
 function openUdharDetail(udharId){
   const u = DATA.udhars.find(x=>x.id===udharId);
-  const txs = udharTxList(udharId).slice().reverse();
+  const txs = sortByDateDesc(udharTxList(udharId), 'date');
   const bal = udharBalance(u);
   const balLabel = bal>0? `${fmtMoney(bal)} receivable (aapko milne hain)` : bal<0? `${fmtMoney(-bal)} payable (aapko dene hain)` : 'Settled';
   let html = `${sheetHeader(u.name)}
@@ -1533,7 +1736,7 @@ function renderConstruction(){
     }).join('') + `</div>`;
 
     html += `<div class="section-title">Material Expenses</div>`;
-    const mats = DATA.materials.slice().reverse();
+    const mats = sortByDateDesc(DATA.materials, 'date');
     html += mats.length ? `<div class="card">` + mats.slice(0,10).map(m=>`
       <div class="list-item" onclick="openGenericForm('materials','${m.id}')">
         <div class="avatar" style="background:#fef3c7;color:#92400e">${icon('box')}</div>
@@ -1803,7 +2006,7 @@ function renderSalary(){
     }).join('') + `</div>`;
 
   html += `<div class="section-title">Advances / Loans</div>`;
-  const advs = DATA.salaryAdvances.slice().reverse();
+  const advs = sortByDateDesc(DATA.salaryAdvances, 'date');
   html += advs.length ? `<div class="card">` + advs.slice(0,10).map(a=>{
     const emp = DATA.employees.find(x=>x.id===a.employeeId);
     return `<div class="list-item" onclick="openSalaryAdvanceForm('${a.id}')">
@@ -1814,7 +2017,7 @@ function renderSalary(){
   }).join('') + `</div>` : emptyState('wallet','Koi advance record nahi','');
 
   html += `<div class="section-title">Salary Payments</div>`;
-  const pays = DATA.salaryPayments.slice().reverse();
+  const pays = sortByDateDesc(DATA.salaryPayments, 'month');
   html += pays.length ? `<div class="card">` + pays.slice(0,10).map(p=>{
     const emp = DATA.employees.find(x=>x.id===p.employeeId);
     const level = p.status==='Paid'?'green':p.status==='Partial'?'amber':'red';
@@ -2067,7 +2270,7 @@ function renderLabour(){
     }).join('') + `</div>`;
 
   html += `<div class="section-title">Advances</div>`;
-  const advs = DATA.labourAdvances.slice().reverse();
+  const advs = sortByDateDesc(DATA.labourAdvances, 'date');
   html += advs.length ? `<div class="card">` + advs.slice(0,10).map(a=>{
     const w = DATA.labourWorkers.find(x=>x.id===a.workerId);
     return `<div class="list-item" onclick="openLabourAdvanceForm('${a.id}')">
@@ -2078,7 +2281,7 @@ function renderLabour(){
   }).join('') + `</div>` : emptyState('wallet','Koi advance record nahi','');
 
   html += `<div class="section-title">Payments — Sent / Pending</div>`;
-  const pays = DATA.labourPayments.slice().reverse();
+  const pays = sortByDateDesc(DATA.labourPayments, 'paymentDate');
   html += pays.length ? `<div class="card">` + pays.slice(0,12).map(p=>{
     const w = DATA.labourWorkers.find(x=>x.id===p.workerId);
     const level = p.status==='Sent'?'green':p.status==='Partial'?'amber':'red';
@@ -2463,7 +2666,7 @@ function renderZakat(){
   html += `<div class="section-title">Charity Ledger</div>`;
   if(!DATA.charityRecords.length){ html += emptyState('moonstar','Koi record nahi',''); }
   else {
-    html += `<div class="card">` + DATA.charityRecords.slice().reverse().map(c=>`
+    html += `<div class="card">` + sortByDateDesc(DATA.charityRecords, 'date').map(c=>`
       <div class="list-item" onclick="openGenericForm('charityRecords','${c.id}')">
         <div class="avatar" style="background:#ccfbf1;color:#0f766e">${icon('moonstar')}</div>
         <div class="meta"><div class="t">${escapeHtml(c.type)}</div><div class="s">${escapeHtml(c.recipient||'')} · ${fmtDate(c.date)}</div></div>
@@ -2889,10 +3092,8 @@ function renderSettings(){
     <div style="height:10px"></div>
     <button class="btn btn-outline btn-block" onclick="exportCSV()">${ICN.down} Export CSV</button>
     <div style="height:10px"></div>
-    <label class="btn btn-ghost btn-block" style="cursor:pointer">
-      ${ICN.up} Import JSON Backup (File)
-      <input type="file" accept="application/json" style="display:none" id="importFile">
-    </label>
+    <button class="btn btn-ghost btn-block" id="importFileBtn">${ICN.up} Import JSON Backup (File)</button>
+    <input type="file" accept="application/json" style="display:none" id="importFile">
     <div style="height:10px"></div>
     <button class="btn btn-outline btn-block" id="pasteRestoreOpenBtn">Paste Backup Text to Restore</button>
     <div class="help-text">Import se pehle current data ka backup zaroor le lein — import mojooda data ko overwrite karta hai.</div>
@@ -2911,7 +3112,7 @@ function renderSettings(){
 
   <div class="section-title">Support</div>
   <div class="card">
-    <button class="btn btn-block" style="background:#25D366;color:#fff" onclick="openWhatsAppSupport()">${ICN.wa} Contact Developer on WhatsApp</button>
+    <button class="btn btn-block" style="background:#25D366;color:#fff" onclick="openWhatsAppChatPanel()">${ICN.wa} Contact Developer on WhatsApp</button>
     <div style="height:10px"></div>
     <button class="btn btn-outline btn-block" id="shareAppBtn">${ICN.repeat} Share This App</button>
   </div>
@@ -2925,8 +3126,24 @@ function renderSettings(){
     GharSaz 360 · v1.0 · 100% Offline · <a href="privacy-policy.html" target="_blank" style="text-decoration:underline">Privacy Policy</a>
   </div>`;
   $('#viewRoot').innerHTML = html;
-  $('#importFile').addEventListener('change', (e)=>{ if(e.target.files[0]) importJSON(e.target.files[0]); });
+// Called by the native Android bridge (see MainActivity.kt) after the
+// user picks a file through the native file chooser — used as a more
+// reliable alternative to the HTML <input type="file"> picker, which
+// needs WebChromeClient.onShowFileChooser implemented natively to work
+// inside a WebView at all.
+window.onNativeFilePicked = function(content){
+  restoreFromJSON(content);
+};
+function importJSONFile(){
+  if(window.AndroidBridge && typeof window.AndroidBridge.pickJSONFile === 'function'){
+    window.AndroidBridge.pickJSONFile();
+    return;
+  }
+  $('#importFile').click();
+}
   $('#pasteRestoreOpenBtn').addEventListener('click', openPasteRestore);
+  $('#importFileBtn').addEventListener('click', importJSONFile);
+  $('#importFile').addEventListener('change', (e)=>{ if(e.target.files[0]) importJSON(e.target.files[0]); });
   $('#copyBackupBtn').addEventListener('click', async ()=>{
     const text = JSON.stringify(DATA, null, 2);
     const ok = await copyTextUniversal(text);
@@ -2950,6 +3167,33 @@ function toggleTheme(){
 function openWhatsAppSupport(){
   const msg = encodeURIComponent('Hello, I need assistance with GharSaz 360 App');
   window.open(`https://wa.me/${SETTINGS.whatsapp.replace(/\D/g,'')}?text=${msg}`, '_blank');
+}
+function openWhatsAppChatPanel(){
+  openSheet(`
+    <div style="background:linear-gradient(135deg,#128C7E,#25D366);margin:-10px -18px 0;padding:20px 20px 16px;border-radius:24px 24px 0 0;color:#fff">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;flex:none">${icon('wa')}</div>
+        <div>
+          <div style="font-weight:800;font-size:15px">GharSaz 360 Support</div>
+          <div style="font-size:12px;opacity:.9;display:flex;align-items:center;gap:5px"><span style="width:7px;height:7px;border-radius:50%;background:#a7f3d0;display:inline-block"></span> Typically replies quickly</div>
+        </div>
+      </div>
+    </div>
+    <div style="padding:20px 4px 4px">
+      <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:18px">
+        <div style="width:30px;height:30px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;flex:none;color:#fff">${icon('wa')}</div>
+        <div style="background:var(--surface-2);padding:12px 14px;border-radius:16px 16px 16px 4px;font-size:13.5px;max-width:82%;line-height:1.5">
+          Assalam-o-Alaikum! 👋 GharSaz 360 mein kisi bhi masle, sawal, ya suggestion ke liye humein WhatsApp par message karein — hum jald jawab dene ki koshish karte hain.
+        </div>
+      </div>
+      <button class="btn btn-block" style="background:#25D366;color:#fff" id="startChatBtn">${ICN.wa} Start Chat on WhatsApp</button>
+    </div>`,
+    (root)=>{
+      $('#startChatBtn', root).addEventListener('click', ()=>{
+        closeSheet();
+        openWhatsAppSupport();
+      });
+    });
 }
 async function shareApp(){
   const url = location.href.split('#')[0];
@@ -3039,7 +3283,7 @@ function initTopbarButtons(){
   });
   $('#fabAdd').innerHTML = ICN.plus;
   $('#fabWa').innerHTML = ICN.wa;
-  $('#fabWa').addEventListener('click', openWhatsAppSupport);
+  $('#fabWa').addEventListener('click', openWhatsAppChatPanel);
 }
 function initApp(){
   try{
@@ -3146,30 +3390,52 @@ if('serviceWorker' in navigator && (location.protocol==='https:' || location.pro
  * 25. PDF EXPORT (native browser print-to-PDF — no external library,
  *     works fully offline on every device that has a print/share sheet)
  * ---------------------------------------------------------------------- */
-function pdfRow(cells){ return `<tr>${cells.map(c=>`<td>${escapeHtml(c===undefined||c===null?'':c)}</td>`).join('')}</tr>`; }
 function pdfSection(title, headers, rows){
-  let html = `<h2>${escapeHtml(title)}</h2>`;
-  if(!rows.length){ html += `<p class="print-empty">Koi record nahi mila.</p>`; return html; }
-  html += `<table><thead><tr>${headers.map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(pdfRow).join('')}</tbody></table>`;
-  return html;
+  const cleanRows = rows.map(r => r.map(c => c===undefined||c===null ? '' : String(c)));
+  return {title, headers, rows: cleanRows};
 }
 function getPrintData(route){
   switch(route){
     case 'budgets':
-      return { title:'Budgets & Income Report', sections: [
+      return { title:'Budgets & Income Report',
+        summary:[
+          {label:'Total Estimated', value:fmtMoney(DATA.budgets.reduce((s,b)=>s+Number(b.estimated||0),0)), color:'#0d9488'},
+          {label:'Total Spent', value:fmtMoney(DATA.budgets.reduce((s,b)=>s+budgetSpent(b),0)), color:'#dc2626'},
+          {label:'Total Income', value:fmtMoney(DATA.incomes.reduce((s,i)=>s+Number(i.amount||0),0)), color:'#059669'},
+        ],
+        sections: [
         pdfSection('Budgets', ['Name','Category','Period','Estimated','Spent'],
           DATA.budgets.map(b=>[b.name,b.category,b.period,fmtMoney(b.estimated),fmtMoney(budgetSpent(b))])),
         pdfSection('Income', ['Source','Date','Amount','Notes'],
           DATA.incomes.map(i=>[i.source,fmtDate(i.date),fmtMoney(i.amount),i.notes||''])),
       ]};
-    case 'expenses':
-      return { title:'Expense Report', sections: [
+    case 'expenses': {
+      const totalExp = DATA.expenses.reduce((s,e)=>s+Number(e.amount||0),0);
+      const totalInc = DATA.incomes.reduce((s,i)=>s+Number(i.amount||0),0);
+      const net = totalInc - totalExp;
+      return { title:'Expense Report',
+        summary:[
+          {label:'Total Income', value:fmtMoney(totalInc), color:'#059669'},
+          {label:'Total Expense', value:fmtMoney(totalExp), color:'#dc2626'},
+          {label: net>=0?'Net Savings':'Net Loss', value:fmtMoney(Math.abs(net)), color: net>=0?'#059669':'#dc2626'},
+        ],
+        sections: [
         pdfSection('All Expenses', ['Date','Category','Sub-category','Amount','Note'],
           DATA.expenses.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''))
             .map(e=>[fmtDate(e.date),e.category,e.subcategory,fmtMoney(e.amount),e.note||''])),
       ]};
-    case 'rent':
-      return { title:'House Rent Report', sections: [
+    }
+    case 'rent': {
+      const totalRent = DATA.rentPayments.reduce((s,p)=>s+Number(p.amount||0),0);
+      const paidRent = DATA.rentPayments.filter(p=>p.status==='Paid').reduce((s,p)=>s+Number(p.amount||0),0);
+      const pendingRent = totalRent - paidRent;
+      return { title:'House Rent Report',
+        summary:[
+          {label:'Total Rent Recorded', value:fmtMoney(totalRent), color:'#0369a1'},
+          {label:'Collected (Paid)', value:fmtMoney(paidRent), color:'#059669'},
+          {label:'Pending', value:fmtMoney(pendingRent), color: pendingRent>0?'#dc2626':'#059669'},
+        ],
+        sections: [
         pdfSection('Properties', ['Name','Type','Address'],
           DATA.properties.map(p=>[p.name,p.type||'',p.address||''])),
         pdfSection('Tenants', ['Name','Property','Phone','Monthly Rent','Security Deposit'],
@@ -3178,54 +3444,100 @@ function getPrintData(route){
             return [t.name, p?p.name:'', t.phone||'', fmtMoney(t.monthlyRent), fmtMoney(t.securityDeposit)];
           })),
         pdfSection('Rent Payments', ['Tenant','Month','Amount','Status'],
-          DATA.rentPayments.slice().reverse().map(pay=>{
+          sortByDateDesc(DATA.rentPayments, 'month').map(pay=>{
             const t = DATA.tenants.find(x=>x.id===pay.tenantId);
             return [t?t.name:'', pay.month, fmtMoney(pay.amount), pay.status];
           })),
       ]};
-    case 'udhar':
-      return { title:'Udhar Khata Ledger', sections: [
+    }
+    case 'udhar': {
+      const totalReceivable = DATA.udhars.reduce((s,u)=>s+Math.max(0,udharBalance(u)),0);
+      const totalPayable = DATA.udhars.reduce((s,u)=>s+Math.max(0,-udharBalance(u)),0);
+      const net = totalReceivable - totalPayable;
+      return { title:'Udhar Khata Ledger',
+        summary:[
+          {label:'Total Receivable', value:fmtMoney(totalReceivable), color:'#059669'},
+          {label:'Total Payable', value:fmtMoney(totalPayable), color:'#dc2626'},
+          {label:'Net Position', value:fmtMoney(Math.abs(net)), color: net>=0?'#059669':'#dc2626'},
+        ],
+        sections: [
         pdfSection('Contacts & Balance', ['Name','Phone','Balance'],
           DATA.udhars.map(u=>{
             const bal = udharBalance(u);
             return [u.name, u.phone||'', bal===0?'Settled':(bal>0?fmtMoney(bal)+' receivable':fmtMoney(-bal)+' payable')];
           })),
         pdfSection('All Transactions', ['Contact','Type','Amount','Date','Status'],
-          DATA.udharTx.slice().reverse().map(t=>{
+          sortByDateDesc(DATA.udharTx, 'date').map(t=>{
             const u = DATA.udhars.find(x=>x.id===t.udharId);
             return [u?u.name:'', t.type, fmtMoney(t.amount), fmtDate(t.date), t.status];
           })),
       ]};
+    }
     case 'todos':
       return { title:'To-Do / Task Report', sections: [
         pdfSection('Tasks', ['Title','Category','Due Date','Priority','Status'],
           DATA.todos.map(t=>[t.title,t.category||'',fmtDate(t.dueDate),t.priority||'',t.status||''])),
       ]};
-    case 'bills':
-      return { title:'Bill Reminders Report', sections: [
+    case 'bills': {
+      const unpaidTotal = DATA.bills.filter(b=>b.status!=='Paid').reduce((s,b)=>s+Number(b.amount||0),0);
+      const paidTotal = DATA.bills.filter(b=>b.status==='Paid').reduce((s,b)=>s+Number(b.amount||0),0);
+      return { title:'Bill Reminders Report',
+        summary:[
+          {label:'Unpaid Total', value:fmtMoney(unpaidTotal), color: unpaidTotal>0?'#dc2626':'#059669'},
+          {label:'Paid Total', value:fmtMoney(paidTotal), color:'#059669'},
+        ],
+        sections: [
         pdfSection('Bills', ['Name','Amount','Due Date','Recurring','Status'],
           DATA.bills.map(b=>[b.name,fmtMoney(b.amount),fmtDate(b.dueDate),b.recurring||'',b.status||''])),
       ]};
+    }
     case 'familyMembers':
       return { title:'Family Members', sections: [
         pdfSection('Members', ['Name','Relation','DOB','Blood Group','CNIC','Phone'],
           DATA.familyMembers.map(m=>[m.name,m.relation||'',fmtDate(m.dob),m.bloodGroup||'',m.cnic||'',m.phone||''])),
       ]};
-    case 'loans':
-      return { title:'Loan / EMI Report', sections: [
+    case 'loans': {
+      const totalPrincipal = DATA.loans.reduce((s,l)=>s+Number(l.principal||0),0);
+      const totalRemaining = DATA.loans.reduce((s,l)=>s+Number(l.remaining!==undefined?l.remaining:l.principal||0),0);
+      const totalPaid = totalPrincipal - totalRemaining;
+      return { title:'Loan / EMI Report',
+        summary:[
+          {label:'Total Borrowed', value:fmtMoney(totalPrincipal), color:'#1d4ed8'},
+          {label:'Paid So Far', value:fmtMoney(totalPaid), color:'#059669'},
+          {label:'Remaining', value:fmtMoney(totalRemaining), color: totalRemaining>0?'#dc2626':'#059669'},
+        ],
+        sections: [
         pdfSection('Loans', ['Name','Lender','Principal','Monthly EMI','Remaining','Next Due'],
           DATA.loans.map(l=>[l.name,l.lender||'',fmtMoney(l.principal),fmtMoney(l.monthlyEMI),fmtMoney(l.remaining!==undefined?l.remaining:l.principal),fmtDate(l.nextDueDate)])),
       ]};
-    case 'subscriptions':
-      return { title:'Subscriptions Report', sections: [
+    }
+    case 'subscriptions': {
+      const activeSubs = DATA.subscriptions.filter(s=>s.status!=='Cancelled');
+      const monthlyTotal = activeSubs.reduce((s,x)=>s+Number(x.amount||0)/(x.billingCycle==='Yearly'?12:1),0);
+      return { title:'Subscriptions Report',
+        summary:[
+          {label:'Active Subscriptions', value:String(activeSubs.length), color:'#7c3aed'},
+          {label:'Est. Monthly Cost', value:fmtMoney(monthlyTotal), color:'#dc2626'},
+          {label:'Est. Yearly Cost', value:fmtMoney(monthlyTotal*12), color:'#dc2626'},
+        ],
+        sections: [
         pdfSection('Subscriptions', ['Name','Category','Amount','Cycle','Next Renewal','Status'],
           DATA.subscriptions.map(s=>[s.name,s.category||'',fmtMoney(s.amount),s.billingCycle||'',fmtDate(s.nextRenewalDate),s.status||''])),
       ]};
-    case 'insurancePolicies':
-      return { title:'Insurance Policies Report', sections: [
+    }
+    case 'insurancePolicies': {
+      const totalPremium = DATA.insurancePolicies.reduce((s,p)=>s+Number(p.premiumAmount||0),0);
+      const totalCoverage = DATA.insurancePolicies.reduce((s,p)=>s+Number(p.coverageAmount||0),0);
+      return { title:'Insurance Policies Report',
+        summary:[
+          {label:'Total Premium', value:fmtMoney(totalPremium), color:'#0369a1'},
+          {label:'Total Coverage', value:fmtMoney(totalCoverage), color:'#059669'},
+        ],
+        sections: [
         pdfSection('Policies', ['Type','Provider','Policy #','Premium','Coverage','Expiry'],
           DATA.insurancePolicies.map(p=>[p.type,p.provider||'',p.policyNumber||'',fmtMoney(p.premiumAmount),fmtMoney(p.coverageAmount),fmtDate(p.expiryDate)])),
       ]};
+    }
     case 'healthRecords':
       return { title:'Health Records Report', sections: [
         pdfSection('Records', ['Member','Type','Doctor','Date','Next Appointment'],
@@ -3236,45 +3548,74 @@ function getPrintData(route){
         pdfSection('Dates', ['Title','Type','Date','Notes'],
           DATA.importantDates.map(e=>[e.title,e.type||'',fmtDate(e.date),e.notes||''])),
       ]};
-    case 'labour':
-      return { title:'Labour Management Report', sections: [
+    case 'labour': {
+      const totalGross = DATA.labourPayments.reduce((s,p)=>s+Number(p.gross||0),0);
+      const totalNet = DATA.labourPayments.reduce((s,p)=>s+Number(p.net||0),0);
+      const outstandingAdv = DATA.labourAdvances.filter(a=>!a.settled).reduce((s,a)=>s+Number(a.amount||0),0);
+      return { title:'Labour Management Report',
+        summary:[
+          {label:'Total Paid Out', value:fmtMoney(totalNet), color:'#c2410c'},
+          {label:'Advances Outstanding', value:fmtMoney(outstandingAdv), color: outstandingAdv>0?'#dc2626':'#059669'},
+        ],
+        sections: [
         pdfSection('Workers', ['Name','Role','Wage Type','Rate','Status'],
           DATA.labourWorkers.map(w=>[w.name,w.role||'',w.wageType,fmtMoney(w.wageRate),w.status||''])),
         pdfSection('Advances', ['Worker','Amount','Date','Settled'],
-          DATA.labourAdvances.slice().reverse().map(a=>{
+          sortByDateDesc(DATA.labourAdvances, 'date').map(a=>{
             const w = DATA.labourWorkers.find(x=>x.id===a.workerId);
             return [w?w.name:'', fmtMoney(a.amount), fmtDate(a.date), a.settled?'Yes':'No'];
           })),
         pdfSection('Payments', ['Worker','Period','Gross','Advance Deducted','Net','Status'],
-          DATA.labourPayments.slice().reverse().map(p=>{
+          sortByDateDesc(DATA.labourPayments, 'paymentDate').map(p=>{
             const w = DATA.labourWorkers.find(x=>x.id===p.workerId);
             return [w?w.name:'', p.period, fmtMoney(p.gross), fmtMoney(p.advanceDeduction), fmtMoney(p.net), p.status];
           })),
       ]};
-    case 'salary':
-      return { title:'Salary Management Report', sections: [
+    }
+    case 'salary': {
+      const activeEmp = DATA.employees.filter(e=>e.status!=='Inactive');
+      const totalPayroll = activeEmp.reduce((s,e)=>s+Number(e.monthlySalary||0),0);
+      const outstandingAdv = DATA.salaryAdvances.filter(a=>!a.settled).reduce((s,a)=>s+Number(a.amount||0),0);
+      return { title:'Salary Management Report',
+        summary:[
+          {label:'Monthly Payroll', value:fmtMoney(totalPayroll), color:'#4f46e5'},
+          {label:'Advances Outstanding', value:fmtMoney(outstandingAdv), color: outstandingAdv>0?'#dc2626':'#059669'},
+        ],
+        sections: [
         pdfSection('Employees', ['Name','Designation','Phone','Monthly Salary','Status'],
           DATA.employees.map(e=>[e.name,e.designation||'',e.phone||'',fmtMoney(e.monthlySalary),e.status||'Active'])),
         pdfSection('Advances / Loans', ['Employee','Amount','Date','Settled'],
-          DATA.salaryAdvances.slice().reverse().map(a=>{
+          sortByDateDesc(DATA.salaryAdvances, 'date').map(a=>{
             const emp = DATA.employees.find(x=>x.id===a.employeeId);
             return [emp?emp.name:'', fmtMoney(a.amount), fmtDate(a.date), a.settled?'Yes':'No'];
           })),
         pdfSection('Salary Payments', ['Employee','Month','Basic','Bonus','Deductions','Net Payable','Status'],
-          DATA.salaryPayments.slice().reverse().map(p=>{
+          sortByDateDesc(DATA.salaryPayments, 'month').map(p=>{
             const emp = DATA.employees.find(x=>x.id===p.employeeId);
             return [emp?emp.name:'', p.month, fmtMoney(p.basic), fmtMoney(p.bonus), fmtMoney((p.absentDeduction||0)+(p.advanceDeduction||0)), fmtMoney(p.net), p.status];
           })),
       ]};
-    case 'construction':
-      return { title:'Construction Report', sections: [
+    }
+    case 'construction': {
+      const totalBudget = DATA.constructionProjects.reduce((s,p)=>s+Number(p.budget||0),0);
+      const totalMaterial = DATA.materials.reduce((s,m)=>s+Number(m.amount||0),0);
+      const totalLabour = DATA.labourers.reduce((s,l)=>s+labourerPayout(l),0);
+      const totalSpend = totalMaterial+totalLabour;
+      return { title:'Construction Report',
+        summary:[
+          {label:'Total Budget', value:fmtMoney(totalBudget), color:'#0369a1'},
+          {label:'Total Spend', value:fmtMoney(totalSpend), color: totalSpend>totalBudget && totalBudget>0 ?'#dc2626':'#b45309'},
+          {label:'Remaining', value:fmtMoney(totalBudget-totalSpend), color: (totalBudget-totalSpend)>=0?'#059669':'#dc2626'},
+        ],
+        sections: [
         pdfSection('Projects', ['Name','Start Date','Budget'],
           DATA.constructionProjects.map(p=>[p.name,fmtDate(p.startDate),fmtMoney(p.budget)])),
         pdfSection('Material Expenses', ['Item','Qty','Amount','Date','Vendor'],
-          DATA.materials.slice().reverse().map(m=>[m.item,m.qty||'',fmtMoney(m.amount),fmtDate(m.date),m.vendor||''])),
+          sortByDateDesc(DATA.materials, 'date').map(m=>[m.item,m.qty||'',fmtMoney(m.amount),fmtDate(m.date),m.vendor||''])),
         pdfSection('Labour Register', ['Name','Role','Daily Wage','Advance','Net Payout'],
           DATA.labourers.map(l=>[l.name,l.role,fmtMoney(l.dailyWage),fmtMoney(l.advance),fmtMoney(labourerPayout(l))])),
       ]};
+    }
     case 'assets':
       return { title:'Assets & Warranty Report', sections: [
         pdfSection('Assets', ['Name','Vendor','Price','Purchase Date','Warranty Expiry'],
@@ -3285,21 +3626,29 @@ function getPrintData(route){
         pdfSection('Maintenance Log', ['Task','Last Serviced','Next Due','Cost'],
           DATA.maintenanceLogs.map(m=>[m.task,fmtDate(m.lastDate),fmtDate(m.nextDate),fmtMoney(m.cost)])),
       ]};
-    case 'vehicle':
-      return { title:'Vehicle Log Report', sections: [
+    case 'vehicle': {
+      const totalFuelCost = DATA.fuelLogs.reduce((s,f)=>s+Number(f.liters||0)*Number(f.rate||0),0);
+      return { title:'Vehicle Log Report',
+        summary:[{label:'Total Fuel Cost', value:fmtMoney(totalFuelCost), color:'#dc2626'}],
+        sections: [
         pdfSection('Vehicles', ['Name','Plate','Odometer'],
           DATA.vehicles.map(v=>[v.name,v.plate||'',(v.odometer||0)+' km'])),
         pdfSection('Fuel Log', ['Vehicle','Date','Liters','Rate','Odometer','Cost'],
-          DATA.fuelLogs.slice().reverse().map(f=>{
+          sortByDateDesc(DATA.fuelLogs, 'date').map(f=>{
             const v = DATA.vehicles.find(x=>x.id===f.vehicleId);
             return [v?v.name:'',fmtDate(f.date),f.liters,f.rate,f.odometer,fmtMoney(f.liters*f.rate)];
           })),
       ]};
-    case 'zakat':
-      return { title:'Zakat & Charity Report', sections: [
+    }
+    case 'zakat': {
+      const totalCharity = DATA.charityRecords.reduce((s,c)=>s+Number(c.amount||0),0);
+      return { title:'Zakat & Charity Report',
+        summary:[{label:'Total Given (All Time)', value:fmtMoney(totalCharity), color:'#0f766e'}],
+        sections: [
         pdfSection('Charity Ledger', ['Type','Recipient','Amount','Date'],
-          DATA.charityRecords.slice().reverse().map(c=>[c.type,c.recipient||'',fmtMoney(c.amount),fmtDate(c.date)])),
+          sortByDateDesc(DATA.charityRecords, 'date').map(c=>[c.type,c.recipient||'',fmtMoney(c.amount),fmtDate(c.date)])),
       ]};
+    }
     case 'solar':
       return { title:'Solar & Utility Report', sections: [
         pdfSection('Monthly Solar Logs', ['Month','Generated','Exported','Peak Units','Off-Peak Units','Tariff'],
@@ -3314,10 +3663,17 @@ function getPrintData(route){
       return { title:'Emergency Contacts', sections: [
         pdfSection('Emergency Contacts', ['Name','Category','Phone'],
           DATA.emergencyContacts.map(c=>[c.name,c.category,c.phone])),
-        pdfSection('Encrypted Vault', [], []),
       ], note:'Encrypted vault item values are never included in PDF exports for your security.' };
-    case 'events':
-      return { title:'Event Budget Report', sections: [
+    case 'events': {
+      const totalBudget = DATA.events.reduce((s,e)=>s+Number(e.budget||0),0);
+      const totalSpend = DATA.eventItems.reduce((s,i)=>s+Number(i.amount||0),0);
+      return { title:'Event Budget Report',
+        summary:[
+          {label:'Total Budget', value:fmtMoney(totalBudget), color:'#db2777'},
+          {label:'Total Spent', value:fmtMoney(totalSpend), color: totalSpend>totalBudget && totalBudget>0?'#dc2626':'#b45309'},
+          {label:'Remaining', value:fmtMoney(totalBudget-totalSpend), color:(totalBudget-totalSpend)>=0?'#059669':'#dc2626'},
+        ],
+        sections: [
         pdfSection('Events', ['Name','Date','Budget'],
           DATA.events.map(e=>[e.name,fmtDate(e.date),fmtMoney(e.budget)])),
         pdfSection('Line Items', ['Event','Item','Vendor','Amount','Advance'],
@@ -3326,39 +3682,61 @@ function getPrintData(route){
             return [ev?ev.name:'',i.item,i.vendor||'',fmtMoney(i.amount),fmtMoney(i.advance)];
           })),
       ]};
-    case 'goals':
-      return { title:'Savings Goals Report', sections: [
+    }
+    case 'goals': {
+      const totalTarget = DATA.goals.reduce((s,g)=>s+Number(g.target||0),0);
+      const totalSaved = DATA.goals.reduce((s,g)=>s+Number(g.saved||0),0);
+      return { title:'Savings Goals Report',
+        summary:[
+          {label:'Total Target', value:fmtMoney(totalTarget), color:'#0891b2'},
+          {label:'Total Saved', value:fmtMoney(totalSaved), color:'#059669'},
+        ],
+        sections: [
         pdfSection('Goals', ['Name','Target','Saved','Target Date'],
           DATA.goals.map(g=>[g.name,fmtMoney(g.target),fmtMoney(g.saved),fmtDate(g.targetDate)])),
       ]};
+    }
     default:
       return null;
   }
+}
+function sectionToHTML(sec){
+  let html = `<h2>${escapeHtml(sec.title)}</h2>`;
+  if(!sec.rows.length){ html += `<p class="print-empty">Koi record nahi mila.</p>`; return html; }
+  html += `<table><thead><tr>${sec.headers.map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody>`;
+  html += sec.rows.map(r=>`<tr>${r.map(c=>`<td>${escapeHtml(c)}</td>`).join('')}</tr>`).join('');
+  html += `</tbody></table>`;
+  return html;
+}
+function summaryToHTML(summary){
+  return `<div style="display:flex;gap:10px;flex-wrap:wrap;margin:16px 0">
+    ${summary.map(s=>`<div style="flex:1;min-width:150px;padding:12px 14px;border-radius:10px;background:${s.color}18;border:1.5px solid ${s.color}55">
+      <div style="font-size:10.5px;color:#666;font-weight:600;text-transform:uppercase">${escapeHtml(s.label)}</div>
+      <div style="font-size:19px;font-weight:800;color:${s.color};margin-top:2px">${escapeHtml(s.value)}</div>
+    </div>`).join('')}
+  </div>`;
 }
 function renderPrintArea(data){
   const area = $('#printArea');
   area.innerHTML = `<h1>GharSaz 360 — ${escapeHtml(data.title)}</h1>
     <div class="print-date">Generated on ${fmtDate(todayISO())}</div>
+    ${data.summary ? summaryToHTML(data.summary) : ''}
     ${data.note?`<p class="print-empty">${escapeHtml(data.note)}</p>`:''}
-    ${data.sections.join('')}
+    ${data.sections.map(sectionToHTML).join('')}
     <div class="print-footer">Generated by GharSaz 360 · 100% Offline App</div>`;
-}
-function htmlToPlainText(html){
-  return html
-    .replace(/<h2>(.*?)<\/h2>/g, '\n$1\n' + '-'.repeat(28) + '\n')
-    .replace(/<p class="print-empty">(.*?)<\/p>/g, '$1\n')
-    .replace(/<\/tr>/g, '\n')
-    .replace(/<tr>/g, '')
-    .replace(/<th>/g, '').replace(/<\/th>/g, '  |  ')
-    .replace(/<td>/g, '').replace(/<\/td>/g, '  |  ')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'")
-    .trim();
 }
 function printDataToText(data){
   let out = `GharSaz 360 — ${data.title}\nGenerated: ${fmtDate(todayISO())}\n`;
+  if(data.summary){
+    out += '\n' + data.summary.map(s=>`${s.label}: ${s.value}`).join('   |   ') + '\n';
+  }
   if(data.note) out += `\n${data.note}\n`;
-  data.sections.forEach(sec=>{ out += '\n' + htmlToPlainText(sec) + '\n'; });
+  data.sections.forEach(sec=>{
+    out += `\n${sec.title}\n${'-'.repeat(30)}\n`;
+    if(!sec.rows.length){ out += 'Koi record nahi mila.\n'; return; }
+    out += sec.headers.join('  |  ') + '\n';
+    sec.rows.forEach(r=>{ out += r.join('  |  ') + '\n'; });
+  });
   return out;
 }
 function exportPDF(){
@@ -3372,8 +3750,7 @@ function exportPDF(){
     <div class="help-text" style="margin-top:12px">"Download PDF File" ek asli .pdf file banati hai. Agar ye is app mein bhi save na ho (kuch purane installed-app builders download block karte hain), to "Copy" hamesha kaam karega.</div>`,
     (root)=>{
       $('#doPdfBtn', root).addEventListener('click', ()=>{
-        const text = printDataToText(data);
-        downloadPDF(`GharSaz360-${data.title.replace(/\s+/g,'-')}-${todayISO()}.pdf`, `GharSaz 360 — ${data.title}`, text);
+        downloadLedgerPDF(`GharSaz360-${data.title.replace(/\s+/g,'-')}-${todayISO()}.pdf`, data);
       });
       $('#doPrintBtn', root).addEventListener('click', ()=>{
         closeSheet();
