@@ -474,8 +474,21 @@ async function downloadPDF(filename, title, bodyText){
   await downloadBlob(filename, blob, bodyText);
 }
 async function downloadLedgerPDF(filename, printData){
-  const blob = buildLedgerPDF(printData);
-  await downloadBlob(filename, blob, printDataToText(printData));
+  let blob;
+  try{
+    blob = buildLedgerPDF(printData);
+  }catch(e){
+    console.error('buildLedgerPDF failed:', e);
+    toast('PDF banane mein masla aaya — text copy ho rahi hai');
+    showCopyFallback(filename, printDataToText(printData));
+    return;
+  }
+  try{
+    await downloadBlob(filename, blob, printDataToText(printData));
+  }catch(e){
+    console.error('downloadBlob failed for PDF:', e);
+    toast('Save karne mein masla aaya: '+(e && e.message ? e.message : 'unknown error'));
+  }
 }
 
 /* ---------------------------------------------------------------------- *
@@ -3992,13 +4005,25 @@ function exportPDF(){
     <div style="display:flex;flex-direction:column;gap:10px">${pdfBtn}${printBtn}${copyBtn}</div>
     <div class="help-text" style="margin-top:12px">"Download PDF File" ek asli .pdf file banati hai. Agar ye is app mein bhi save na ho (kuch purane installed-app builders download block karte hain), to "Copy" hamesha kaam karega.</div>`,
     (root)=>{
-      $('#doPdfBtn', root).addEventListener('click', ()=>{
-        downloadLedgerPDF(`GharSaz360-${data.title.replace(/\s+/g,'-')}-${todayISO()}.pdf`, data);
+      $('#doPdfBtn', root).addEventListener('click', async ()=>{
+        try{
+          await downloadLedgerPDF(`GharSaz360-${data.title.replace(/\s+/g,'-')}-${todayISO()}.pdf`, data);
+        }catch(e){
+          console.error('PDF export failed:', e);
+          toast('PDF export mein masla aaya: '+(e && e.message ? e.message : 'unknown error'));
+        }
       });
       $('#doPrintBtn', root).addEventListener('click', ()=>{
         closeSheet();
         renderPrintArea(data);
         setTimeout(()=>{
+          // Native print (Android's PrintManager) — works even inside a
+          // bare WebView, unlike window.print() which needs the browser's
+          // own print UI that most installed-app shells don't have.
+          if(window.AndroidBridge && typeof window.AndroidBridge.printPage === 'function'){
+            try{ window.AndroidBridge.printPage(); return; }
+            catch(e){ console.warn('Native print failed:', e); }
+          }
           try{ window.print(); }
           catch(e){ toast('Print is app mein available nahi — "Download PDF" ya "Copy" try karein'); }
         }, 150);
