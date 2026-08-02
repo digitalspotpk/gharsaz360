@@ -540,9 +540,25 @@ function defaultState(){
   };
 }
 let DATA = loadData();
+function nativeStorageAvailable(){
+  return !!(window.AndroidBridge && typeof window.AndroidBridge.getData === 'function' && typeof window.AndroidBridge.setData === 'function');
+}
 function loadData(){
   try{
-    const raw = localStorage.getItem(STORAGE_KEY);
+    let raw = null;
+    if(nativeStorageAvailable()){
+      raw = window.AndroidBridge.getData(STORAGE_KEY);
+      if(!raw){
+        // First run after this fix, or first time in this particular
+        // mode (live vs offline) — pull in any pre-existing data from
+        // this origin's own localStorage once, then it lives in the
+        // shared native store from now on for both modes.
+        const legacy = localStorage.getItem(STORAGE_KEY);
+        if(legacy){ raw = legacy; window.AndroidBridge.setData(STORAGE_KEY, legacy); }
+      }
+    } else {
+      raw = localStorage.getItem(STORAGE_KEY);
+    }
     if(!raw) return defaultState();
     const parsed = JSON.parse(raw);
     return Object.assign(defaultState(), parsed);
@@ -550,7 +566,11 @@ function loadData(){
 }
 function saveData(){
   try{
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+    const json = JSON.stringify(DATA);
+    if(nativeStorageAvailable()){
+      window.AndroidBridge.setData(STORAGE_KEY, json);
+    }
+    localStorage.setItem(STORAGE_KEY, json); // harmless local mirror, also the browser/web fallback
   }catch(e){
     console.error('save error', e);
     showErrorScreen('Data Save Nahi Ho Saka',
@@ -572,13 +592,58 @@ window.addEventListener('unhandledrejection', (e)=>{
   console.error('Unhandled promise rejection:', e.reason);
 });
 let SETTINGS = loadSettings();
-function loadSettings(){
+const REGION_CURRENCY = {
+  PK:'PKR', IN:'INR', BD:'BDT',
+  US:'USD', CA:'CAD', AU:'AUD',
+  GB:'GBP',
+  SA:'SAR', AE:'AED', QA:'QAR', KW:'KWD', OM:'OMR', BH:'AED',
+  MY:'MYR', TR:'TRY',
+  DE:'EUR', FR:'EUR', IT:'EUR', ES:'EUR', NL:'EUR', IE:'EUR',
+  PT:'EUR', BE:'EUR', AT:'EUR', GR:'EUR', FI:'EUR',
+};
+function detectDeviceCountry(){
   try{
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    return Object.assign({theme:'light', whatsapp:'+923065772734', currency:'PKR', language:'en'}, raw?JSON.parse(raw):{});
-  }catch(e){ return {theme:'light', whatsapp:'+923065772734', currency:'PKR', language:'en'}; }
+    if(window.AndroidBridge && typeof window.AndroidBridge.getDeviceCountry === 'function'){
+      const c = window.AndroidBridge.getDeviceCountry();
+      if(c) return c.toUpperCase();
+    }
+  }catch(e){}
+  try{
+    const locale = navigator.language || navigator.userLanguage || '';
+    const parts = locale.split(/[-_]/);
+    if(parts[1]) return parts[1].toUpperCase();
+  }catch(e){}
+  return '';
 }
-function saveSettings(){ localStorage.setItem(SETTINGS_KEY, JSON.stringify(SETTINGS)); }
+function detectDefaultCurrency(){
+  const country = detectDeviceCountry();
+  return REGION_CURRENCY[country] || 'PKR';
+}
+function loadSettings(){
+  const defaults = {theme:'light', whatsapp:'+923065772734', currency:detectDefaultCurrency(), language:'en'};
+  try{
+    let raw = null;
+    if(window.AndroidBridge && typeof window.AndroidBridge.getData === 'function'){
+      raw = window.AndroidBridge.getData(SETTINGS_KEY);
+      if(!raw){
+        const legacy = localStorage.getItem(SETTINGS_KEY);
+        if(legacy){ raw = legacy; window.AndroidBridge.setData(SETTINGS_KEY, legacy); }
+      }
+    } else {
+      raw = localStorage.getItem(SETTINGS_KEY);
+    }
+    return Object.assign(defaults, raw?JSON.parse(raw):{});
+  }catch(e){ return defaults; }
+}
+function saveSettings(){
+  const json = JSON.stringify(SETTINGS);
+  try{
+    if(window.AndroidBridge && typeof window.AndroidBridge.setData === 'function'){
+      window.AndroidBridge.setData(SETTINGS_KEY, json);
+    }
+  }catch(e){}
+  localStorage.setItem(SETTINGS_KEY, json);
+}
 
 /* ---------------------------------------------------------------------- *
  * 4. EXPENSE CATEGORY TREE (preset, deeply nested)
