@@ -7,7 +7,7 @@
    returning users get the update.
    ========================================================================== */
 
-const CACHE_VERSION = 'gharsaz360-v2.2.0';
+const CACHE_VERSION = 'gharsaz360-v2.4.0';
 const APP_SHELL = [
   './',
   './index.html',
