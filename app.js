@@ -65,9 +65,31 @@ function icon(name, color){ return `<span style="color:${color||'currentColor'};
 const $ = (sel, root) => (root||document).querySelector(sel);
 const $$ = (sel, root) => Array.from((root||document).querySelectorAll(sel));
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+const CURRENCIES = {
+  PKR:{symbol:'Rs',name:'Pakistani Rupee',locale:'en-PK'},
+  INR:{symbol:'₹',name:'Indian Rupee',locale:'en-IN'},
+  USD:{symbol:'$',name:'US Dollar',locale:'en-US'},
+  GBP:{symbol:'£',name:'British Pound',locale:'en-GB'},
+  EUR:{symbol:'€',name:'Euro',locale:'de-DE'},
+  SAR:{symbol:'ر.س',name:'Saudi Riyal',locale:'ar-SA'},
+  AED:{symbol:'د.إ',name:'UAE Dirham',locale:'ar-AE'},
+  BDT:{symbol:'৳',name:'Bangladeshi Taka',locale:'bn-BD'},
+  QAR:{symbol:'ر.ق',name:'Qatari Riyal',locale:'ar-QA'},
+  KWD:{symbol:'د.ك',name:'Kuwaiti Dinar',locale:'ar-KW'},
+  OMR:{symbol:'ر.ع.',name:'Omani Rial',locale:'ar-OM'},
+  MYR:{symbol:'RM',name:'Malaysian Ringgit',locale:'ms-MY'},
+  CAD:{symbol:'C$',name:'Canadian Dollar',locale:'en-CA'},
+  AUD:{symbol:'A$',name:'Australian Dollar',locale:'en-AU'},
+  TRY:{symbol:'₺',name:'Turkish Lira',locale:'tr-TR'},
+};
+function currentCurrency(){
+  const code = (SETTINGS && SETTINGS.currency) ? SETTINGS.currency : 'PKR';
+  return CURRENCIES[code] || CURRENCIES.PKR;
+}
 function fmtMoney(n){
   n = Number(n)||0;
-  return 'Rs ' + n.toLocaleString('en-PK', {maximumFractionDigits:0});
+  const c = currentCurrency();
+  return c.symbol + ' ' + n.toLocaleString(c.locale, {maximumFractionDigits:0});
 }
 function sortByDateDesc(arr, field){
   return arr.slice().sort((a,b)=> String(b[field]||'').localeCompare(String(a[field]||'')));
@@ -553,8 +575,8 @@ let SETTINGS = loadSettings();
 function loadSettings(){
   try{
     const raw = localStorage.getItem(SETTINGS_KEY);
-    return Object.assign({theme:'light', whatsapp:'+923065772734', currency:'Rs'}, raw?JSON.parse(raw):{});
-  }catch(e){ return {theme:'light', whatsapp:'+923065772734', currency:'Rs'}; }
+    return Object.assign({theme:'light', whatsapp:'+923065772734', currency:'PKR', language:'en'}, raw?JSON.parse(raw):{});
+  }catch(e){ return {theme:'light', whatsapp:'+923065772734', currency:'PKR', language:'en'}; }
 }
 function saveSettings(){ localStorage.setItem(SETTINGS_KEY, JSON.stringify(SETTINGS)); }
 
@@ -581,6 +603,85 @@ const CATEGORY_COLORS = {
   'Personal Care & Habits':'#ec4899','Insurance & Financial':'#14b8a6','Leisure & Entertainment':'#a855f7',
   'Religious & Social':'#059669','Pets':'#f97316','Miscellaneous':'#6b7280',
 };
+
+/* ---------------------------------------------------------------------- *
+ * 4B. TRANSLATIONS — English / Urdu / Hindi. Covers navigation, module
+ * names, and common Settings/Dashboard strings. (Deeper per-field form
+ * labels throughout the 24 modules stay in English/Roman-Urdu for now —
+ * translating every field across the whole app is a much larger,
+ * separate effort; this covers the highest-visibility text so the app
+ * reads naturally in all three languages at a glance.)
+ * ---------------------------------------------------------------------- */
+const LANGUAGES = {
+  en:{name:'English', native:'English'},
+  ur:{name:'Urdu', native:'اردو'},
+  hi:{name:'Hindi', native:'हिन्दी'},
+};
+const MODULE_TRANSLATIONS = {
+  dashboard:{ur:'ڈیش بورڈ', hi:'डैशबोर्ड'},
+  more:{ur:'مزید', hi:'और'},
+  budgets:{ur:'بجٹ اور آمدنی', hi:'बजट और आय'},
+  expenses:{ur:'اخراجات', hi:'खर्च'},
+  rent:{ur:'کرایہ', hi:'किराया'},
+  udhar:{ur:'ادھار کھاتہ', hi:'उधार खाता'},
+  construction:{ur:'تعمیرات', hi:'निर्माण'},
+  salary:{ur:'تنخواہ کا انتظام', hi:'वेतन प्रबंधन'},
+  labour:{ur:'مزدور کا انتظام', hi:'मज़दूर प्रबंधन'},
+  todos:{ur:'کرنے کے کام', hi:'कार्य सूची'},
+  bills:{ur:'بلوں کی یاد دہانی', hi:'बिल रिमाइंडर'},
+  familyMembers:{ur:'خاندان کے افراد', hi:'परिवार के सदस्य'},
+  loans:{ur:'قرض / قسط', hi:'ऋण / ईएमआई'},
+  subscriptions:{ur:'سبسکرپشنز', hi:'सदस्यता'},
+  insurancePolicies:{ur:'انشورنس پالیسیاں', hi:'बीमा पॉलिसी'},
+  healthRecords:{ur:'صحت کا ریکارڈ', hi:'स्वास्थ्य रिकॉर्ड'},
+  importantDates:{ur:'اہم تاریخیں', hi:'महत्वपूर्ण तिथियाँ'},
+  assets:{ur:'اثاثے اور وارنٹی', hi:'संपत्ति और वारंटी'},
+  maintenance:{ur:'دیکھ بھال', hi:'रखरखाव'},
+  vehicle:{ur:'گاڑی کا ریکارڈ', hi:'वाहन लॉग'},
+  zakat:{ur:'زکوٰۃ اور خیرات', hi:'ज़कात और दान'},
+  solar:{ur:'سولر اور یوٹیلیٹی', hi:'सोलर और यूटिलिटी'},
+  pantry:{ur:'کچن اسٹور', hi:'पेंट्री प्लानर'},
+  vault:{ur:'دستاویز والٹ', hi:'दस्तावेज़ वॉल्ट'},
+  events:{ur:'تقریب کا بجٹ', hi:'कार्यक्रम बजट'},
+  goals:{ur:'بچت کے اہداف', hi:'बचत लक्ष्य'},
+  settings:{ur:'ترتیبات', hi:'सेटिंग्स'},
+};
+function moduleLabel(m){
+  if(!m) return '';
+  const lang = (SETTINGS && SETTINGS.language) || 'en';
+  if(lang==='en') return m.label;
+  const tr = MODULE_TRANSLATIONS[m.id];
+  return (tr && tr[lang]) ? tr[lang] : m.label;
+}
+const UI_STRINGS = {
+  currency:{en:'Currency', ur:'کرنسی', hi:'मुद्रा'},
+  language:{en:'Language', ur:'زبان', hi:'भाषा'},
+  save:{en:'Save', ur:'محفوظ کریں', hi:'सेव करें'},
+  cancel:{en:'Cancel', ur:'منسوخ کریں', hi:'रद्द करें'},
+  delete:{en:'Delete', ur:'حذف کریں', hi:'हटाएं'},
+  edit:{en:'Edit', ur:'ترمیم', hi:'संपादित करें'},
+  thisMonthExpense:{en:'This Month Expense', ur:'اس مہینے کا خرچ', hi:'इस महीने का खर्च'},
+  thisMonthIncome:{en:'This Month Income', ur:'اس مہینے کی آمدنی', hi:'इस महीने की आय'},
+  rentPending:{en:'Rent Pending', ur:'کرایہ باقی', hi:'किराया बकाया'},
+  udharOpen:{en:'Udhar Open', ur:'کھلا ادھار', hi:'खुला उधार'},
+  reminders:{en:'Reminders', ur:'یاد دہانیاں', hi:'रिमाइंडर'},
+  budgetsOverview:{en:'Budgets Overview', ur:'بجٹ کا جائزہ', hi:'बजट अवलोकन'},
+  quickAccess:{en:'Quick Access', ur:'فوری رسائی', hi:'त्वरित पहुँच'},
+  financialOverview:{en:'Financial Overview', ur:'مالی جائزہ', hi:'वित्तीय अवलोकन'},
+  overallProfit:{en:'Overall Profit', ur:'کل منافع', hi:'कुल लाभ'},
+  overallLoss:{en:'Overall Loss', ur:'کل نقصان', hi:'कुल हानि'},
+  darkMode:{en:'Dark Mode', ur:'ڈارک موڈ', hi:'डार्क मोड'},
+  backupRestore:{en:'Backup & Restore', ur:'بیک اپ اور بحالی', hi:'बैकअप और पुनर्स्थापना'},
+  appearance:{en:'Appearance', ur:'ظاہری شکل', hi:'रूप-रंग'},
+  support:{en:'Support', ur:'مدد', hi:'सहायता'},
+  dangerZone:{en:'Danger Zone', ur:'خطرناک علاقہ', hi:'खतरनाक क्षेत्र'},
+};
+function t(key){
+  const lang = (SETTINGS && SETTINGS.language) || 'en';
+  const entry = UI_STRINGS[key];
+  if(!entry) return key;
+  return entry[lang] || entry.en || key;
+}
 
 /* ---------------------------------------------------------------------- *
  * 5. NAVIGATION
@@ -645,7 +746,7 @@ function renderNotFound(){
 
 function renderTopbar(){
   const mod = ALL_MODULES.find(m=>m.id===ROUTE) || ALL_MODULES[0];
-  $('#pageTitle').textContent = mod.label;
+  $('#pageTitle').textContent = moduleLabel(mod);
   const subs = {
     dashboard:'Aaj ka khulasa', budgets:'Estimated vs actual', expenses:'Sab kharchay ek jaga',
     rent:'Properties, tenants, receipts', udhar:'Udhar len-den ledger', construction:'Material & labour',
@@ -670,7 +771,7 @@ function renderBottomNav(){
   nav.innerHTML = BOTTOM_NAV.map(n=>{
     const active = (ROUTE===n.id) || (n.id==='more' && !BOTTOM_NAV.some(b=>b.id===ROUTE) && ROUTE!=='dashboard' && ROUTE!=='expenses' && ROUTE!=='rent' && ROUTE!=='udhar');
     return `<button class="nav-item ${active?'active':''}" data-nav="${n.id}">
-      ${icon(n.icon)}<span class="dot"></span>${n.label}
+      ${icon(n.icon)}<span class="dot"></span>${moduleLabel(n)}
     </button>`;
   }).join('');
   $$('.nav-item', nav).forEach(btn=>btn.addEventListener('click', ()=>navigate(btn.dataset.nav)));
@@ -1046,8 +1147,8 @@ const DEFAULT_QUICK_ACCESS = ['expenses','rent','udhar','salary','zakat','vehicl
 let dashboardTab = 'home';
 function renderDashboard(){
   let tabsHtml = `<div class="chip-row">
-    <div class="chip ${dashboardTab==='home'?'active':''}" data-dtab="home">Dashboard</div>
-    <div class="chip ${dashboardTab==='overview'?'active':''}" data-dtab="overview">Financial Overview</div>
+    <div class="chip ${dashboardTab==='home'?'active':''}" data-dtab="home">${moduleLabel({id:'dashboard',label:'Dashboard'})}</div>
+    <div class="chip ${dashboardTab==='overview'?'active':''}" data-dtab="overview">${t('financialOverview')}</div>
   </div>`;
 
   if(dashboardTab==='overview'){
@@ -1091,27 +1192,27 @@ function renderDashboard(){
   let html = tabsHtml + `
   <div class="grid-2">
     <div class="stat-card">
-      <div class="stat-label">This Month Expense</div>
+      <div class="stat-label">${t('thisMonthExpense')}</div>
       <div class="stat-value">${fmtMoney(exp)}</div>
     </div>
     <div class="stat-card blue">
-      <div class="stat-label">This Month Income</div>
+      <div class="stat-label">${t('thisMonthIncome')}</div>
       <div class="stat-value">${fmtMoney(inc)}</div>
     </div>
   </div>
   <div class="grid-2" style="margin-top:12px">
     <div class="stat-card ${pendingRent?'warn':''}">
-      <div class="stat-label">Rent Pending</div>
+      <div class="stat-label">${t('rentPending')}</div>
       <div class="stat-value">${pendingRent}</div>
     </div>
     <div class="stat-card ${pendingUdhar?'danger':''}">
-      <div class="stat-label">Udhar Open</div>
+      <div class="stat-label">${t('udharOpen')}</div>
       <div class="stat-value">${pendingUdhar}</div>
     </div>
   </div>`;
 
   if(upcomingMaint || warrantySoon || billsDue || overdueTasks || emiDue || subsRenewing || policiesExpiring || birthdaysSoon){
-    html += `<div class="section-title">Reminders</div><div class="card">`;
+    html += `<div class="section-title">${t('reminders')}</div><div class="card">`;
     if(overdueTasks) html += reminderRow('checksquare','#0e7490', overdueTasks+' task(s) overdue', ()=>navigate('todos'));
     if(billsDue) html += reminderRow('bell','#b45309', billsDue+' bill(s) due in 5 days', ()=>navigate('bills'));
     if(emiDue) html += reminderRow('bank','#1d4ed8', emiDue+' EMI(s) due in 7 days', ()=>navigate('loans'));
@@ -1123,7 +1224,7 @@ function renderDashboard(){
     html += `</div>`;
   }
 
-  html += `<div class="section-title">Budgets Overview</div>`;
+  html += `<div class="section-title">${t('budgetsOverview')}</div>`;
   if(!DATA.budgets.length){
     html += emptyState('wallet','Koi budget nahi bana', 'Apna pehla budget banayen taake kharche track ho sakein', 'budgets');
   } else {
@@ -1132,7 +1233,7 @@ function renderDashboard(){
 
   const qa = (SETTINGS.quickAccess && SETTINGS.quickAccess.length) ? SETTINGS.quickAccess : DEFAULT_QUICK_ACCESS;
   html += `<div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
-    <span>Quick Access</span>
+    <span>${t('quickAccess')}</span>
     <button class="icon-btn" style="width:30px;height:30px" onclick="openQuickAccessEditor()">${ICN.edit}</button>
   </div><div class="grid-4">`;
   qa.forEach(id=>{
@@ -1154,7 +1255,7 @@ function openQuickAccessEditor(){
         <label class="card-row" style="padding:10px 12px;border:1.5px solid var(--border);border-radius:12px;cursor:pointer">
           <input type="checkbox" value="${m.id}" ${current.includes(m.id)?'checked':''} class="qaCheck" style="width:18px;height:18px;flex:none">
           <div class="ic" style="background:${m.color}20;color:${m.color};width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex:none">${icon(m.icon)}</div>
-          <span style="font-size:13px;font-weight:600">${m.label}</span>
+          <span style="font-size:13px;font-weight:600">${moduleLabel(m)}</span>
         </label>`).join('')}
     </div>
     <button class="btn btn-primary btn-block" style="margin-top:14px" id="saveQABtn">Save</button>`,
@@ -1290,7 +1391,7 @@ function renderFinancialOverviewHTML(){
     <div class="stat-card danger"><div class="stat-label">Total Out (all modules)</div><div class="stat-value">${fmtMoney(totalOut)}</div></div>
   </div>`;
   html += `<div class="stat-card" style="background:linear-gradient(135deg,${totalNet>=0?'#065f46,#10b981':'#991b1b,#ef4444'});margin-top:12px">
-    <div class="stat-label">${totalNet>=0?'Overall Profit':'Overall Loss'}</div>
+    <div class="stat-label">${totalNet>=0?t('overallProfit'):t('overallLoss')}</div>
     <div class="stat-value">${fmtMoney(Math.abs(totalNet))}</div>
   </div>`;
 
@@ -1326,7 +1427,7 @@ function renderFinancialOverviewHTML(){
 function moduleTile(m){
   return `<div class="module-tile" onclick="navigate('${m.id}')">
     <div class="ic" style="background:${m.color}20;color:${m.color}">${icon(m.icon)}</div>
-    <span>${m.label}</span>
+    <span>${moduleLabel(m)}</span>
   </div>`;
 }
 function moreGrid(){
@@ -3323,6 +3424,10 @@ function renderSettings(){
   const bridgeStatus = hasBridge
     ? `<div class="badge green">Connected</div>`
     : `<div class="badge amber">Not Connected (using web fallback)</div>`;
+  let isLive = null;
+  if(hasBridge && typeof window.AndroidBridge.isLiveMode === 'function'){
+    try{ isLive = window.AndroidBridge.isLiveMode(); }catch(e){}
+  }
   let html = `
   <div class="card">
     <div class="card-title">Storage Used</div>
@@ -3336,8 +3441,16 @@ function renderSettings(){
     </div>
     ${bridgeStatus}
   </div>
+  ${isLive!==null?`
+  <div class="card card-row" style="justify-content:space-between">
+    <div>
+      <div class="card-title">Connection Mode</div>
+      <div class="card-sub" style="margin-top:2px">${isLive ? 'Live website se chal rahi hai — updates turant milte hain.' : 'Internet nahi hai — offline bundled copy se chal rahi hai.'}</div>
+    </div>
+    <div class="badge ${isLive?'green':'amber'}">${isLive?'Live':'Offline'}</div>
+  </div>`:''}
 
-  <div class="section-title">Backup &amp; Restore</div>
+  <div class="section-title">${t('backupRestore')}</div>
   <div class="card">
     <button class="btn btn-outline btn-block" id="checkUpdatesBtn">${ICN.refresh} Check for Updates / Refresh App</button>
     <div class="help-text">Ya app ke andar sab se upar se neeche ki taraf swipe (pull-to-refresh) karein.</div>
@@ -3360,20 +3473,34 @@ function renderSettings(){
     <div class="card-sub">Google Drive API se personal backup sync karne ka feature is version mein shamil nahi hai. Iske ilawa aap "Export JSON Backup" istemal kar ke apna data manually kahin bhi (Google Drive, WhatsApp, Email) save/share kar sakte hain — koi bhi data external server ko nahi jata.</div>
   </div>
 
-  <div class="section-title">Appearance</div>
+  <div class="section-title">${t('appearance')}</div>
   <div class="card card-row" style="justify-content:space-between">
-    <div class="card-title">Dark Mode</div>
+    <div class="card-title">${t('darkMode')}</div>
     <button class="btn btn-sm btn-outline" id="toggleThemeSettings">${document.documentElement.classList.contains('dark')?'Switch to Light':'Switch to Dark'}</button>
   </div>
+  <div class="card">
+    <div class="field" style="margin-bottom:12px">
+      <label>${t('currency')}</label>
+      <select id="currencySelect">
+        ${Object.entries(CURRENCIES).map(([code,c])=>`<option value="${code}" ${SETTINGS.currency===code?'selected':''}>${c.symbol} — ${c.name} (${code})</option>`).join('')}
+      </select>
+    </div>
+    <div class="field" style="margin-bottom:0">
+      <label>${t('language')}</label>
+      <select id="languageSelect">
+        ${Object.entries(LANGUAGES).map(([code,l])=>`<option value="${code}" ${SETTINGS.language===code?'selected':''}>${l.native} (${l.name})</option>`).join('')}
+      </select>
+    </div>
+  </div>
 
-  <div class="section-title">Support</div>
+  <div class="section-title">${t('support')}</div>
   <div class="card">
     <button class="btn btn-block" style="background:#25D366;color:#fff" onclick="openWhatsAppChatPanel()">${ICN.wa} Contact Developer on WhatsApp</button>
     <div style="height:10px"></div>
     <button class="btn btn-outline btn-block" id="shareAppBtn">${ICN.repeat} Share This App</button>
   </div>
 
-  <div class="section-title">Danger Zone</div>
+  <div class="section-title">${t('dangerZone')}</div>
   <div class="card">
     <button class="btn btn-danger btn-block" onclick="wipeAllData()">${ICN.trash} Erase All App Data</button>
   </div>
@@ -3407,6 +3534,12 @@ function importJSONFile(){
     else showCopyFallback(`gharsaz360-backup-${todayISO()}`, text);
   });
   $('#toggleThemeSettings').addEventListener('click', toggleTheme);
+  $('#currencySelect').addEventListener('change', (e)=>{
+    SETTINGS.currency = e.target.value; saveSettings(); toast('Currency updated'); renderRoute();
+  });
+  $('#languageSelect').addEventListener('change', (e)=>{
+    SETTINGS.language = e.target.value; saveSettings(); toast('Language updated'); renderRoute();
+  });
   $('#checkUpdatesBtn').addEventListener('click', doRefresh);
   $('#shareAppBtn').addEventListener('click', shareApp);
 }
@@ -3451,21 +3584,34 @@ function openWhatsAppChatPanel(){
       });
     });
 }
+const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.digitalspot.gharsaz360';
+function getShareUrl(){
+  // Prefer the native bridge (single source of truth on the Android
+  // side), fall back to the hardcoded Play Store link. Never share the
+  // internal file:// or GitHub Pages URL — nobody should see that.
+  if(window.AndroidBridge && typeof window.AndroidBridge.getPlayStoreUrl === 'function'){
+    try{ const u = window.AndroidBridge.getPlayStoreUrl(); if(u) return u; }catch(e){}
+  }
+  return PLAY_STORE_URL;
+}
 async function shareApp(){
-  const url = location.href.split('#')[0];
+  const url = getShareUrl();
   const text = 'GharSaz 360 — Smart Home, Property & Life Suite. Ek behtareen offline app ghar, property, aur rozmara zindagi manage karne ke liye!';
+  try{
+    if(window.AndroidBridge && typeof window.AndroidBridge.shareText === 'function'){
+      window.AndroidBridge.shareText(`${text}\n${url}`);
+      return;
+    }
+  }catch(e){ console.warn('Native share failed:', e); }
   try{
     if(navigator.share){
       await navigator.share({title:'GharSaz 360', text, url});
       return;
     }
   }catch(e){ if(e && e.name==='AbortError') return; }
-  try{
-    await navigator.clipboard.writeText(`${text}\n${url}`);
-    toast('Link copy ho gaya — kahin bhi paste kar dein');
-  }catch(e){
-    toast('Share available nahi is browser mein');
-  }
+  const ok = await copyTextUniversal(`${text}\n${url}`);
+  if(ok) toast('Link copy ho gaya — kahin bhi paste kar dein');
+  else toast('Share available nahi is app mein');
 }
 
 const ROUTE_RENDERERS = {
@@ -3619,6 +3765,13 @@ function initPullToRefresh(){
   }
 }
 async function doRefresh(){
+  // Native bridge (Android app): checks connectivity itself and either
+  // reloads the LIVE site or the offline copy, whichever is right.
+  if(window.AndroidBridge && typeof window.AndroidBridge.refreshFromServer === 'function'){
+    toast('App refresh ho rahi hai...');
+    try{ window.AndroidBridge.refreshFromServer(); return; }
+    catch(e){ console.warn('Native refresh failed, falling back:', e); }
+  }
   toast('App refresh ho rahi hai...');
   try{
     if('serviceWorker' in navigator){
