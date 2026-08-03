@@ -591,7 +591,6 @@ window.addEventListener('error', (e)=>{
 window.addEventListener('unhandledrejection', (e)=>{
   console.error('Unhandled promise rejection:', e.reason);
 });
-let SETTINGS = loadSettings();
 const REGION_CURRENCY = {
   PK:'PKR', IN:'INR', BD:'BDT',
   US:'USD', CA:'CAD', AU:'AUD',
@@ -644,6 +643,11 @@ function saveSettings(){
   }catch(e){}
   localStorage.setItem(SETTINGS_KEY, json);
 }
+// IMPORTANT: this call must come AFTER everything above it (REGION_CURRENCY,
+// detectDeviceCountry, detectDefaultCurrency, loadSettings) is fully
+// defined — loadSettings() runs immediately below and depends on all of
+// it. Moving this earlier causes "Cannot access before initialization".
+let SETTINGS = loadSettings();
 
 /* ---------------------------------------------------------------------- *
  * 4. EXPENSE CATEGORY TREE (preset, deeply nested)
