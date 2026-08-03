@@ -2266,7 +2266,9 @@ function openSalaryAdvanceForm(editId){
         saveData(); closeSheet(); toast('Advance saved'); renderRoute();
       });
       if(editItem) $('#delAdv', root).addEventListener('click', ()=>{
-        DATA.salaryAdvances = DATA.salaryAdvances.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute();
+        confirmDialog('Delete this advance record?', ()=>{
+          DATA.salaryAdvances = DATA.salaryAdvances.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute();
+        });
       });
     });
 }
@@ -2536,7 +2538,9 @@ function openLabourAdvanceForm(editId){
         saveData(); closeSheet(); toast('Advance saved'); renderRoute();
       });
       if(editItem) $('#delLA', root).addEventListener('click', ()=>{
-        DATA.labourAdvances = DATA.labourAdvances.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute();
+        confirmDialog('Delete this advance record?', ()=>{
+          DATA.labourAdvances = DATA.labourAdvances.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute();
+        });
       });
     });
 }
@@ -3263,7 +3267,9 @@ function openEmergencyContactForm(editId){
         saveData(); closeSheet(); toast('Saved'); renderRoute();
       });
       if(editItem) $('#delEC', root).addEventListener('click', ()=>{
-        DATA.emergencyContacts = DATA.emergencyContacts.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute();
+        confirmDialog('Delete this contact?', ()=>{
+          DATA.emergencyContacts = DATA.emergencyContacts.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute();
+        });
       });
     });
 }
@@ -3338,7 +3344,9 @@ function openEventItemForm(editId){
         saveData(); closeSheet(); toast('Saved'); renderRoute();
       });
       if(editItem) $('#delEV', root).addEventListener('click', ()=>{
-        DATA.eventItems = DATA.eventItems.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute();
+        confirmDialog('Delete this line item?', ()=>{
+          DATA.eventItems = DATA.eventItems.filter(x=>x.id!==editId); saveData(); closeSheet(); renderRoute();
+        });
       });
     });
 }
