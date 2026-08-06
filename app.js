@@ -2017,7 +2017,11 @@ function openUdharDetail(udharId){
   const txs = sortByDateDesc(udharTxList(udharId), 'date');
   const bal = udharBalance(u);
   const balLabel = bal>0? `${fmtMoney(bal)} receivable (aapko milne hain)` : bal<0? `${fmtMoney(-bal)} payable (aapko dene hain)` : 'Settled';
-  let html = `${sheetHeader(u.name)}
+  let html = `<div class="sheet-header"><h2>${escapeHtml(u.name)}</h2>
+    <div style="display:flex;gap:6px">
+      <button class="icon-btn" id="editContact" style="width:36px;height:36px">${ICN.edit}</button>
+      <button class="icon-btn" onclick="closeSheet()">${ICN.close}</button>
+    </div></div>
     <div class="card" style="background:var(--surface-2);box-shadow:none">
       <div class="card-row" style="justify-content:space-between">
         <div><div class="card-sub">Phone</div><div style="font-weight:700">${escapeHtml(u.phone||'—')}</div></div>
@@ -2036,6 +2040,7 @@ function openUdharDetail(udharId){
     </div>`).join('') : `<div class="card-sub" style="padding:10px 0">Koi transaction nahi</div>`;
 
   openSheet(html, (root)=>{
+    $('#editContact', root).addEventListener('click', ()=>openUdharForm(udharId));
     $('#addTx', root).addEventListener('click', ()=>openUdharTxForm(udharId));
     $('#remindWa', root).addEventListener('click', ()=>{
       const msg = encodeURIComponent(`Assalam-o-Alaikum ${u.name}, GharSaz 360 ledger ke mutabiq aapka ${balLabel.includes('receivable')?'':''} balance ${fmtMoney(Math.abs(bal))} hai. Barae meherbani jald adayegi karein. Shukriya.`);
@@ -3522,7 +3527,7 @@ function renderSettings(){
   <div class="card card-row" style="justify-content:space-between">
     <div>
       <div class="card-title">Connection Mode</div>
-      <div class="card-sub" style="margin-top:2px">${isLive ? 'Live website se chal rahi hai — updates turant milte hain.' : 'Internet nahi hai — offline bundled copy se chal rahi hai.'}</div>
+      <div class="card-sub" style="margin-top:2px">${isLive ? 'Internet available hai — sab kuch normal chal raha hai.' : 'Internet nahi hai — app cached (offline-saved) copy se chal rahi hai. Data hamesha same rehta hai chahe internet ho ya na ho.'}</div>
     </div>
     <div class="badge ${isLive?'green':'amber'}">${isLive?'Live':'Offline'}</div>
   </div>`:''}
@@ -3764,11 +3769,27 @@ function initTopbarButtons(){
   $('#fabWa').innerHTML = ICN.wa;
   $('#fabWa').addEventListener('click', openWhatsAppChatPanel);
 }
+function updateConnBadge(){
+  const badge = $('#connBadge');
+  if(!badge) return;
+  let online;
+  if(window.AndroidBridge && typeof window.AndroidBridge.isLiveMode === 'function'){
+    try{ online = window.AndroidBridge.isLiveMode(); }catch(e){ online = navigator.onLine; }
+  } else {
+    online = navigator.onLine;
+  }
+  badge.textContent = online ? 'Live' : 'Offline';
+  badge.className = 'badge ' + (online ? 'green' : 'amber');
+}
 function initApp(){
   try{
     initTheme();
     initTopbarButtons();
     initPullToRefresh();
+    updateConnBadge();
+    window.addEventListener('online', updateConnBadge);
+    window.addEventListener('offline', updateConnBadge);
+    setInterval(updateConnBadge, 15000); // catches native-bridge connectivity changes too
     const initialRoute = location.hash.replace('#','');
     ROUTE = ALL_MODULES.some(m=>m.id===initialRoute) ? initialRoute : 'dashboard';
     renderRoute();
@@ -3776,8 +3797,8 @@ function initApp(){
 
     setTimeout(()=>{
       $('#splash').classList.add('hide');
-      setTimeout(()=>$('#splash').remove(), 700);
-    }, 3000);
+      setTimeout(()=>$('#splash').remove(), 350);
+    }, 900);
   }catch(e){
     console.error('App failed to start:', e);
     $('#splash').classList.add('hide');
@@ -3842,8 +3863,8 @@ function initPullToRefresh(){
   }
 }
 async function doRefresh(){
-  // Native bridge (Android app): checks connectivity itself and either
-  // reloads the LIVE site or the offline copy, whichever is right.
+  // Native bridge (Android app): reloads the WebView directly — fast,
+  // single-origin, no cache-juggling needed.
   if(window.AndroidBridge && typeof window.AndroidBridge.refreshFromServer === 'function'){
     toast('App refresh ho rahi hai...');
     try{ window.AndroidBridge.refreshFromServer(); return; }
@@ -3860,7 +3881,7 @@ async function doRefresh(){
       await Promise.all(keys.map(k=>caches.delete(k)));
     }
   }catch(e){ console.warn('Refresh cache-clear failed:', e); }
-  setTimeout(()=>{ location.reload(); }, 350);
+  setTimeout(()=>{ location.reload(); }, 150);
 }
 
 /* Register service worker for offline caching (GitHub Pages / TWA ready).
