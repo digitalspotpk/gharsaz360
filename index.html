@@ -133,7 +133,8 @@ main.view{padding:16px; max-width:640px; margin:0 auto; animation:fadeUp .35s ea
 }
 .badge.green{background:#d1fae5;color:#065f46;}
 .badge.amber{background:#fef3c7;color:#92400e;}
-.badge.red{background:#fee2e2;color:#991b1b;}
+.badge.red{background:#fee2e2;color:#991b1b;animation:badgePulse 2s ease-in-out infinite;}
+@keyframes badgePulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.25);}50%{box-shadow:0 0 0 5px rgba(220,38,38,0);}}
 html.dark .badge.green{background:#08382c;color:#6ee7b7;}
 html.dark .badge.amber{background:#3a2c07;color:#fbbf24;}
 html.dark .badge.red{background:#3a1010;color:#fca5a5;}
@@ -150,7 +151,15 @@ html.dark .badge.red{background:#3a1010;color:#fca5a5;}
   border-radius:var(--radius); padding:16px; color:#fff;
   background:linear-gradient(135deg,var(--teal-700),var(--teal-500));
   box-shadow:var(--shadow-lg); position:relative; overflow:hidden;
+  animation:cardIn .45s cubic-bezier(.2,.9,.3,1);
 }
+.stat-card::after{
+  content:''; position:absolute; top:0; left:-60%; width:50%; height:100%;
+  background:linear-gradient(115deg, transparent, rgba(255,255,255,.16), transparent);
+  animation:shimmer 3.2s ease-in-out infinite;
+}
+@keyframes shimmer{0%{left:-60%;}100%{left:130%;}}
+@keyframes cardIn{from{opacity:0;transform:translateY(8px) scale(.98);}to{opacity:1;transform:translateY(0) scale(1);}}
 .stat-card .stat-label{font-size:12px;opacity:.85;font-weight:600;}
 .stat-card .stat-value{font-size:24px;font-weight:800;margin-top:6px;}
 .stat-card.warn{background:linear-gradient(135deg,#b45309,#f59e0b);}
@@ -160,12 +169,14 @@ html.dark .badge.red{background:#3a1010;color:#fca5a5;}
 .module-tile{
   display:flex; flex-direction:column; align-items:center; gap:8px;
   padding:14px 8px; border-radius:16px; background:var(--surface);
-  border:1px solid var(--border); cursor:pointer; transition:transform .15s;
+  border:1px solid var(--border); cursor:pointer; transition:transform .15s, box-shadow .2s;
 }
-.module-tile:active{transform:scale(.94);}
+.module-tile:active{transform:scale(.94); box-shadow:0 0 0 3px rgba(16,185,129,.2);}
 .module-tile .ic{
   width:44px;height:44px;border-radius:13px;display:flex;align-items:center;justify-content:center;
+  transition:transform .2s ease;
 }
+.module-tile:active .ic{transform:scale(1.08);}
 .module-tile span{font-size:11px;font-weight:700;text-align:center;line-height:1.2;}
 
 .progress{height:8px;border-radius:6px;background:var(--surface-2);overflow:hidden;}
@@ -181,7 +192,8 @@ html.dark .badge.red{background:#3a1010;color:#fca5a5;}
   transition:transform .15s ease, filter .15s ease;
 }
 .btn:active{transform:scale(.96);}
-.btn-primary{background:linear-gradient(135deg,var(--teal-600),var(--teal-500));color:#fff;box-shadow:0 8px 20px rgba(5,150,105,.35);}
+.btn-primary{background:linear-gradient(135deg,var(--teal-600),var(--teal-500));color:#fff;box-shadow:0 8px 20px rgba(5,150,105,.35);transition:transform .15s ease, box-shadow .2s ease;}
+.btn-primary:active{box-shadow:0 4px 14px rgba(5,150,105,.5), 0 0 0 4px rgba(16,185,129,.18);}
 .btn-block{width:100%;}
 .btn-ghost{background:var(--surface-2);color:var(--text);}
 .btn-outline{background:transparent;border:1.5px solid var(--border);color:var(--text);}
@@ -194,15 +206,26 @@ html.dark .btn-danger{background:#3a1010;color:#fca5a5;}
   width:56px;height:56px;border-radius:20px; border:none;
   background:linear-gradient(135deg,var(--teal-600),var(--teal-400)); color:#fff;
   display:flex;align-items:center;justify-content:center; box-shadow:0 12px 28px rgba(5,150,105,.45);
-  cursor:pointer; transition:transform .2s ease;
+  cursor:pointer; transition:transform .2s ease, box-shadow .3s ease;
+  animation:fabGlow 2.6s ease-in-out infinite;
 }
-.fab:active{transform:scale(.9) rotate(90deg);}
+@keyframes fabGlow{
+  0%,100%{box-shadow:0 12px 28px rgba(5,150,105,.45), 0 0 0 0 rgba(16,185,129,.35);}
+  50%{box-shadow:0 12px 32px rgba(5,150,105,.55), 0 0 0 10px rgba(16,185,129,0);}
+}
+.fab:active{transform:scale(.9) rotate(90deg); animation:none;}
 .fab-wa{
   position:fixed; left:14px; bottom:calc(90px + var(--safe-bottom)); z-index:45;
   width:44px;height:44px;border-radius:50%; border:none; background:#25D366; color:#fff;
   display:flex;align-items:center;justify-content:center; box-shadow:0 10px 20px rgba(37,211,102,.45);
-  cursor:pointer; opacity:.92;
+  cursor:pointer; opacity:.92; transition:transform .2s ease;
+  animation:waGlow 2.6s ease-in-out infinite .4s;
 }
+@keyframes waGlow{
+  0%,100%{box-shadow:0 10px 20px rgba(37,211,102,.45), 0 0 0 0 rgba(37,211,102,.4);}
+  50%{box-shadow:0 10px 24px rgba(37,211,102,.55), 0 0 0 8px rgba(37,211,102,0);}
+}
+.fab-wa:active{transform:scale(.88); animation:none;}
 .fab-wa svg{width:22px;height:22px;}
 
 /* ---------- Bottom Nav ---------- */
@@ -220,8 +243,8 @@ html.dark .btn-danger{background:#3a1010;color:#fca5a5;}
 }
 .nav-item.active{color:var(--teal-600);}
 html.dark .nav-item.active{color:var(--teal-300);}
-.nav-item .dot{width:6px;height:6px;border-radius:50%;background:transparent;margin-top:1px;}
-.nav-item.active .dot{background:currentColor;}
+.nav-item .dot{width:6px;height:6px;border-radius:50%;background:transparent;margin-top:1px;transition:box-shadow .3s;}
+.nav-item.active .dot{background:currentColor;box-shadow:0 0 8px currentColor;}
 
 /* ---------- Forms ---------- */
 .field{margin-bottom:14px;}
@@ -353,7 +376,10 @@ kbd{background:var(--surface-2);padding:2px 6px;border-radius:6px;font-size:11px
   <div class="topbar">
     <button class="icon-btn" id="menuBtn" aria-label="Menu"></button>
     <div style="flex:1">
-      <h1 id="pageTitle">Dashboard</h1>
+      <div style="display:flex;align-items:center;gap:8px">
+        <h1 id="pageTitle">Dashboard</h1>
+        <span id="connBadge" class="badge green" style="font-size:9px;padding:2px 8px">Live</span>
+      </div>
       <div class="sub" id="pageSub">Aaj ka khulasa</div>
     </div>
     <button class="icon-btn" id="pdfBtn" aria-label="Download PDF"></button>
@@ -399,3 +425,4 @@ kbd{background:var(--surface-2);padding:2px 6px;border-radius:6px;font-size:11px
 <script src="app.js" defer></script>
 </body>
 </html>
+
