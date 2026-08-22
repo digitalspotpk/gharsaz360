@@ -1061,10 +1061,13 @@ const SCHEMAS = {
       {key:'name', label:'Loan Name', type:'text', required:true, placeholder:'e.g. Car Loan - Meezan Bank'},
       {key:'lender', label:'Lender / Bank', type:'text'},
       {key:'principal', label:'Total Loan Amount (Rs)', type:'number', required:true},
-      {key:'monthlyEMI', label:'Monthly EMI (Rs)', type:'number', required:true},
+      {key:'frequency', label:'Installment Frequency', type:'select', options:['Monthly','15-Day (Fortnightly)','Weekly']},
+      {key:'monthlyEMI', label:'Installment Amount (Rs)', type:'number', required:true},
       {key:'startDate', label:'Start Date', type:'date'},
-      {key:'tenureMonths', label:'Tenure (Months)', type:'number'},
-      {key:'nextDueDate', label:'Next EMI Due Date', type:'date'},
+      {key:'tenureMonths', label:'Total Installments', type:'number'},
+      {key:'nextDueDate', label:'Next Installment Due Date', type:'date'},
+      {key:'penaltyType', label:'Overdue Penalty Type', type:'select', options:['None','Fixed Amount','Percentage of Installment']},
+      {key:'penaltyAmount', label:'Penalty Value (Rs, or % if Percentage)', type:'number'},
     ]
   },
   subscriptions: {
@@ -2835,27 +2838,57 @@ function renderFamily(){
 /* ---------------------------------------------------------------------- *
  * 13H. LOAN / EMI TRACKER
  * ---------------------------------------------------------------------- */
+function loanFrequencyDays(freq){
+  if(freq==='Weekly') return 7;
+  if(freq==='15-Day (Fortnightly)') return 15;
+  return null; // Monthly handled via setMonth
+}
+function loanAdvanceDueDate(l){
+  const d = new Date(l.nextDueDate||todayISO());
+  const days = loanFrequencyDays(l.frequency);
+  if(days) d.setDate(d.getDate()+days);
+  else d.setMonth(d.getMonth()+1);
+  return d.toISOString().slice(0,10);
+}
+function loanPenaltyDue(l){
+  if(!l.penaltyType || l.penaltyType==='None') return 0;
+  const overdueDays = daysUntil(l.nextDueDate);
+  if(overdueDays===null || overdueDays>=0) return 0; // not overdue
+  const val = Number(l.penaltyAmount||0);
+  if(l.penaltyType==='Percentage of Installment') return Math.round(Number(l.monthlyEMI||0) * val/100);
+  return val; // Fixed Amount
+}
 function markEMIPaid(loanId){
   const l = DATA.loans.find(x=>x.id===loanId);
   const remaining = l.remaining!==undefined ? l.remaining : Number(l.principal||0);
+  const penalty = loanPenaltyDue(l);
   l.remaining = Math.max(0, remaining - Number(l.monthlyEMI||0));
-  DATA.loanPayments.push({id:uid(), loanId, amount:l.monthlyEMI, date:todayISO()});
-  const d = new Date(l.nextDueDate||todayISO()); d.setMonth(d.getMonth()+1);
-  l.nextDueDate = d.toISOString().slice(0,10);
-  saveData(); toast('EMI payment recorded'); renderRoute();
+  l.penaltyCollected = Number(l.penaltyCollected||0) + penalty;
+  DATA.loanPayments.push({id:uid(), loanId, amount:Number(l.monthlyEMI||0)+penalty, penalty, date:todayISO()});
+  l.nextDueDate = loanAdvanceDueDate(l);
+  saveData();
+  toast(penalty>0 ? `Payment + ${fmtMoney(penalty)} late fee record ho gaya` : 'Installment payment recorded');
+  renderRoute();
 }
 function renderLoans(){
   if(!DATA.loans.length){ $('#viewRoot').innerHTML = emptyState('bank','Koi loan nahi','Loan/EMI add karein','loans'); return; }
   const totalRemaining = DATA.loans.reduce((s,l)=>s+Number(l.remaining!==undefined?l.remaining:l.principal||0),0);
-  let html = `<div class="stat-card danger"><div class="stat-label">Total Remaining</div><div class="stat-value">${fmtMoney(totalRemaining)}</div></div>`;
+  const totalPenaltyDue = DATA.loans.reduce((s,l)=>s+loanPenaltyDue(l),0);
+  let html = `<div class="grid-2">
+    <div class="stat-card danger"><div class="stat-label">Total Remaining</div><div class="stat-value">${fmtMoney(totalRemaining)}</div></div>
+    <div class="stat-card ${totalPenaltyDue>0?'warn':''}"><div class="stat-label">Overdue Late Fees</div><div class="stat-value">${fmtMoney(totalPenaltyDue)}</div></div>
+  </div>`;
   html += `<div class="section-title">Loans</div><div class="card">` + DATA.loans.map(l=>{
     const remaining = l.remaining!==undefined ? l.remaining : l.principal;
+    const penalty = loanPenaltyDue(l);
+    const freqLabel = l.frequency==='Weekly'?'/week':l.frequency==='15-Day (Fortnightly)'?'/15-days':'/month';
     return `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
       <div class="card-row" style="justify-content:space-between">
-        <div onclick="openGenericForm('loans','${l.id}')" style="cursor:pointer"><div style="font-weight:700;font-size:13px">${escapeHtml(l.name)}</div><div class="card-sub">${escapeHtml(l.lender||'')} · EMI ${fmtMoney(l.monthlyEMI)}</div></div>
+        <div onclick="openGenericForm('loans','${l.id}')" style="cursor:pointer"><div style="font-weight:700;font-size:13px">${escapeHtml(l.name)}</div><div class="card-sub">${escapeHtml(l.lender||'')} · ${fmtMoney(l.monthlyEMI)}${freqLabel}</div></div>
         <div style="text-align:right">${dueBadge(l.nextDueDate,7)}<div class="card-sub" style="margin-top:4px">Remaining: ${fmtMoney(remaining)}</div></div>
       </div>
-      <button class="btn btn-sm btn-primary" style="margin-top:8px" onclick="markEMIPaid('${l.id}')">Mark EMI Paid</button>
+      ${penalty>0?`<div class="card-sub" style="color:#dc2626;font-weight:700;margin-top:4px">⚠ Overdue Late Fee: ${fmtMoney(penalty)}</div>`:''}
+      <button class="btn btn-sm btn-primary" style="margin-top:8px" onclick="markEMIPaid('${l.id}')">Mark Installment Paid${penalty>0?' (+ Late Fee)':''}</button>
     </div>`;
   }).join('') + `</div>`;
   $('#viewRoot').innerHTML = html;
@@ -4007,15 +4040,17 @@ function getPrintData(route){
       const totalPrincipal = DATA.loans.reduce((s,l)=>s+Number(l.principal||0),0);
       const totalRemaining = DATA.loans.reduce((s,l)=>s+Number(l.remaining!==undefined?l.remaining:l.principal||0),0);
       const totalPaid = totalPrincipal - totalRemaining;
+      const totalPenaltyDue = DATA.loans.reduce((s,l)=>s+loanPenaltyDue(l),0);
       return { title:'Loan / EMI Report',
         summary:[
           {label:'Total Borrowed', value:fmtMoney(totalPrincipal), color:'#1d4ed8'},
           {label:'Paid So Far', value:fmtMoney(totalPaid), color:'#059669'},
           {label:'Remaining', value:fmtMoney(totalRemaining), color: totalRemaining>0?'#dc2626':'#059669'},
         ],
+        note: totalPenaltyDue>0 ? `Overdue late fees currently due: ${fmtMoney(totalPenaltyDue)}` : undefined,
         sections: [
-        pdfSection('Loans', ['Name','Lender','Principal','Monthly EMI','Remaining','Next Due'],
-          DATA.loans.map(l=>[l.name,l.lender||'',fmtMoney(l.principal),fmtMoney(l.monthlyEMI),fmtMoney(l.remaining!==undefined?l.remaining:l.principal),fmtDate(l.nextDueDate)])),
+        pdfSection('Loans', ['Name','Lender','Frequency','Installment','Remaining','Next Due','Overdue Fee'],
+          DATA.loans.map(l=>[l.name,l.lender||'',l.frequency||'Monthly',fmtMoney(l.monthlyEMI),fmtMoney(l.remaining!==undefined?l.remaining:l.principal),fmtDate(l.nextDueDate),fmtMoney(loanPenaltyDue(l))])),
       ]};
     }
     case 'subscriptions': {
