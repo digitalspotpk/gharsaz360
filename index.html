@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>GharSaz 360 - Smart Home, Property &amp; Life Suite</title>
-<meta name="description" content="All-in-one offline home, property, rent, construction, udhar khata and life management suite.">
+<title>GharSaz 360 - Smart Home, Property & Life Suite v4.0</title>
+<meta name="description" content="All-in-one offline home, property, rent, construction, udhar khata, gold investment, business, and life management suite. Separate PDF per module.">
 <meta name="theme-color" content="#059669">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="favicon.png">
@@ -13,14 +13,6 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="GharSaz 360">
 <style>
-/* ============================================================
-   GharSaz 360 — Design System
-   Material You (Android 14) tone + soft glassmorphism accents.
-   No external font/icon/CSS-framework dependency: fully self
-   contained so the app renders correctly even before the
-   service worker has cached anything (true first-load offline
-   capability on a local file:// open).
-   ============================================================ */
 :root{
   --teal-900:#052e2b; --teal-800:#065f46; --teal-700:#0f766e; --teal-600:#059669;
   --teal-500:#10b981; --teal-400:#34d399; --teal-300:#6ee7b7; --teal-100:#d1fae5;
@@ -28,7 +20,6 @@
   --red-500:#ef4444; --red-100:#fee2e2;
   --sky-500:#0ea5e9;
   --violet-500:#8b5cf6;
-
   --bg:#f2f7f5;
   --surface:#ffffff;
   --surface-2:#eef5f2;
@@ -69,8 +60,6 @@ body{
 button,input,select,textarea{font-family:inherit; color:inherit;}
 ::-webkit-scrollbar{width:0;height:0;}
 a{color:inherit;text-decoration:none;}
-
-/* ---------- Splash Screen ---------- */
 #splash{
   position:fixed; inset:0; z-index:9999;
   display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -91,11 +80,8 @@ a{color:inherit;text-decoration:none;}
 .splash-bar{width:140px;height:4px;border-radius:4px;background:rgba(255,255,255,.25);margin-top:26px;overflow:hidden;}
 .splash-bar::after{content:'';display:block;height:100%;width:40%;background:#fff;border-radius:4px;animation:loadBar 1.2s ease-in-out infinite;}
 @keyframes loadBar{0%{transform:translateX(-100%);}100%{transform:translateX(350%);}}
-
-/* ---------- App Shell ---------- */
 #app{display:none; min-height:100%; padding-bottom:calc(84px + var(--safe-bottom));}
 #app.ready{display:block;}
-
 .topbar{
   position:sticky; top:0; z-index:40;
   display:flex; align-items:center; gap:10px;
@@ -111,11 +97,8 @@ a{color:inherit;text-decoration:none;}
   cursor:pointer; transition:transform .15s ease, background .2s;
 }
 .icon-btn:active{transform:scale(.9);}
-
 main.view{padding:16px; max-width:640px; margin:0 auto; animation:fadeUp .35s ease;}
 @keyframes fadeUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
-
-/* ---------- Cards ---------- */
 .card{
   background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
   padding:16px; box-shadow:var(--shadow); margin-bottom:14px;
@@ -138,7 +121,6 @@ main.view{padding:16px; max-width:640px; margin:0 auto; animation:fadeUp .35s ea
 html.dark .badge.green{background:#08382c;color:#6ee7b7;}
 html.dark .badge.amber{background:#3a2c07;color:#fbbf24;}
 html.dark .badge.red{background:#3a1010;color:#fca5a5;}
-
 .section-title{
   font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.5px;
   color:var(--text-dim); margin:22px 0 10px;
@@ -146,7 +128,6 @@ html.dark .badge.red{background:#3a1010;color:#fca5a5;}
 .grid-2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
 .grid-3{display:grid; grid-template-columns:repeat(3,1fr); gap:10px;}
 .grid-4{display:grid; grid-template-columns:repeat(4,1fr); gap:10px;}
-
 .stat-card{
   border-radius:var(--radius); padding:16px; color:#fff;
   background:linear-gradient(135deg,var(--teal-700),var(--teal-500));
@@ -165,7 +146,6 @@ html.dark .badge.red{background:#3a1010;color:#fca5a5;}
 .stat-card.warn{background:linear-gradient(135deg,#b45309,#f59e0b);}
 .stat-card.danger{background:linear-gradient(135deg,#991b1b,#ef4444);}
 .stat-card.blue{background:linear-gradient(135deg,#075985,#0ea5e9);}
-
 .module-tile{
   display:flex; flex-direction:column; align-items:center; gap:8px;
   padding:14px 8px; border-radius:16px; background:var(--surface);
@@ -178,57 +158,40 @@ html.dark .badge.red{background:#3a1010;color:#fca5a5;}
 }
 .module-tile:active .ic{transform:scale(1.08);}
 .module-tile span{font-size:11px;font-weight:700;text-align:center;line-height:1.2;}
-
 .progress{height:8px;border-radius:6px;background:var(--surface-2);overflow:hidden;}
 .progress > div{height:100%;border-radius:6px;transition:width .5s ease;}
 .progress.green > div{background:linear-gradient(90deg,var(--teal-500),var(--teal-400));}
 .progress.amber > div{background:linear-gradient(90deg,#f59e0b,#fbbf24);}
 .progress.red > div{background:linear-gradient(90deg,#dc2626,#ef4444);}
-
-/* ---------- Buttons ---------- */
 .btn{
   border:none; border-radius:14px; padding:12px 18px; font-weight:700; font-size:14px;
   cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:8px;
   transition:transform .15s ease, filter .15s ease;
 }
 .btn:active{transform:scale(.96);}
-.btn-primary{background:linear-gradient(135deg,var(--teal-600),var(--teal-500));color:#fff;box-shadow:0 8px 20px rgba(5,150,105,.35);transition:transform .15s ease, box-shadow .2s ease;}
-.btn-primary:active{box-shadow:0 4px 14px rgba(5,150,105,.5), 0 0 0 4px rgba(16,185,129,.18);}
+.btn-primary{background:linear-gradient(135deg,var(--teal-600),var(--teal-500));color:#fff;box-shadow:0 8px 20px rgba(5,150,105,.35);}
 .btn-block{width:100%;}
 .btn-ghost{background:var(--surface-2);color:var(--text);}
 .btn-outline{background:transparent;border:1.5px solid var(--border);color:var(--text);}
 .btn-danger{background:#fee2e2;color:#991b1b;}
 html.dark .btn-danger{background:#3a1010;color:#fca5a5;}
 .btn-sm{padding:8px 12px;font-size:12px;border-radius:10px;}
-
 .fab{
   position:fixed; right:18px; bottom:calc(96px + var(--safe-bottom)); z-index:45;
   width:56px;height:56px;border-radius:20px; border:none;
   background:linear-gradient(135deg,var(--teal-600),var(--teal-400)); color:#fff;
   display:flex;align-items:center;justify-content:center; box-shadow:0 12px 28px rgba(5,150,105,.45);
   cursor:pointer; transition:transform .2s ease, box-shadow .3s ease;
-  animation:fabGlow 2.6s ease-in-out infinite;
 }
-@keyframes fabGlow{
-  0%,100%{box-shadow:0 12px 28px rgba(5,150,105,.45), 0 0 0 0 rgba(16,185,129,.35);}
-  50%{box-shadow:0 12px 32px rgba(5,150,105,.55), 0 0 0 10px rgba(16,185,129,0);}
-}
-.fab:active{transform:scale(.9) rotate(90deg); animation:none;}
+.fab:active{transform:scale(.9) rotate(90deg);}
 .fab-wa{
   position:fixed; left:14px; bottom:calc(90px + var(--safe-bottom)); z-index:45;
   width:44px;height:44px;border-radius:50%; border:none; background:#25D366; color:#fff;
   display:flex;align-items:center;justify-content:center; box-shadow:0 10px 20px rgba(37,211,102,.45);
   cursor:pointer; opacity:.92; transition:transform .2s ease;
-  animation:waGlow 2.6s ease-in-out infinite .4s;
 }
-@keyframes waGlow{
-  0%,100%{box-shadow:0 10px 20px rgba(37,211,102,.45), 0 0 0 0 rgba(37,211,102,.4);}
-  50%{box-shadow:0 10px 24px rgba(37,211,102,.55), 0 0 0 8px rgba(37,211,102,0);}
-}
-.fab-wa:active{transform:scale(.88); animation:none;}
+.fab-wa:active{transform:scale(.88);}
 .fab-wa svg{width:22px;height:22px;}
-
-/* ---------- Bottom Nav ---------- */
 .bottomnav{
   position:fixed; left:0; right:0; bottom:0; z-index:44;
   display:flex; justify-content:space-around; align-items:center;
@@ -245,8 +208,6 @@ html.dark .btn-danger{background:#3a1010;color:#fca5a5;}
 html.dark .nav-item.active{color:var(--teal-300);}
 .nav-item .dot{width:6px;height:6px;border-radius:50%;background:transparent;margin-top:1px;transition:box-shadow .3s;}
 .nav-item.active .dot{background:currentColor;box-shadow:0 0 8px currentColor;}
-
-/* ---------- Forms ---------- */
 .field{margin-bottom:14px;}
 .field label{display:block;font-size:12px;font-weight:700;color:var(--text-dim);margin-bottom:6px;}
 .field input, .field select, .field textarea{
@@ -257,8 +218,6 @@ html.dark .nav-item.active{color:var(--teal-300);}
 .field textarea{resize:vertical;min-height:70px;}
 .field-row{display:flex;gap:10px;}
 .field-row .field{flex:1;}
-
-/* ---------- Modal / Sheet ---------- */
 .overlay{
   position:fixed; inset:0; background:rgba(4,20,17,.55); z-index:60;
   display:flex; align-items:flex-end; justify-content:center;
@@ -276,11 +235,7 @@ html.dark .nav-item.active{color:var(--teal-300);}
 .sheet-handle{width:40px;height:4px;background:var(--border);border-radius:4px;margin:8px auto 14px;}
 .sheet-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
 .sheet-header h2{font-size:17px;margin:0;font-weight:800;}
-
-/* ---------- Misc ---------- */
-.empty{
-  text-align:center; padding:40px 20px; color:var(--text-dim);
-}
+.empty{text-align:center; padding:40px 20px; color:var(--text-dim);}
 .empty .ic{width:56px;height:56px;margin:0 auto 12px;opacity:.5;}
 .chip-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px;}
 .chip{
@@ -305,56 +260,21 @@ html.dark .nav-item.active{color:var(--teal-300);}
   z-index:80; opacity:0; transition:all .3s ease; box-shadow:var(--shadow-lg); max-width:88vw; text-align:center;
 }
 .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
-.ring-wrap{position:relative;width:88px;height:88px;flex:none;}
-.ring-wrap svg{transform:rotate(-90deg);}
-.ring-wrap .ring-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;}
 .divider{height:1px;background:var(--border);margin:14px 0;}
 .help-text{font-size:11px;color:var(--text-dim);margin-top:4px;}
-kbd{background:var(--surface-2);padding:2px 6px;border-radius:6px;font-size:11px;}
 @media (min-width:640px){
   .fab{right:calc(50% - 320px + 18px);}
   .fab-wa{left:calc(50% - 320px + 18px);}
 }
-
-/* ---------- Pull to Refresh ---------- */
-#pullIndicator{
-  position:fixed; top:0; left:50%; transform:translate(-50%,-60px) rotate(0deg);
-  width:42px;height:42px;border-radius:50%;
-  background:var(--surface); box-shadow:var(--shadow-lg); color:var(--teal-600);
-  display:flex;align-items:center;justify-content:center;
-  z-index:70; opacity:0; transition:opacity .2s ease;
-  pointer-events:none;
-}
-#pullIndicator.visible{opacity:1;}
-#pullIndicator.spinning svg{animation:ptrSpin .8s linear infinite;}
-@keyframes ptrSpin{to{transform:rotate(360deg);}}
-
-/* ---------- Print / PDF export ---------- */
 #printArea{display:none;}
 @media print{
   body *{visibility:hidden !important;}
   #printArea, #printArea *{visibility:visible !important;}
-  #printArea{
-    display:block !important; position:absolute; left:0; top:0; width:100%;
-    padding:24px; color:#111; background:#fff;
-  }
-  #printArea h1{font-size:20px;margin:0 0 4px;color:#065f46;}
-  #printArea .print-date{font-size:11px;color:#666;margin-bottom:18px;}
-  #printArea h2{font-size:14px;margin:20px 0 8px;color:#065f46;border-bottom:1px solid #ccc;padding-bottom:4px;}
-  #printArea table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:6px;}
-  #printArea th, #printArea td{border:1px solid #ddd;padding:6px 8px;text-align:left;}
-  #printArea th{background:#f0fdf4;color:#065f46;}
-  #printArea .print-empty{font-size:12px;color:#888;font-style:italic;}
-  #printArea .print-footer{margin-top:24px;font-size:10px;color:#999;text-align:center;}
+  #printArea{display:block !important; position:absolute; left:0; top:0; width:100%;padding:24px; color:#111; background:#fff;}
 }
 </style>
 </head>
 <body>
-
-<!-- Pull-to-refresh indicator -->
-<div id="pullIndicator">
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/></svg>
-</div>
 
 <!-- ================= SPLASH SCREEN ================= -->
 <div id="splash">
@@ -372,7 +292,6 @@ kbd{background:var(--surface-2);padding:2px 6px;border-radius:6px;font-size:11px
 
 <!-- ================= APP SHELL ================= -->
 <div id="app">
-
   <div class="topbar">
     <button class="icon-btn" id="menuBtn" aria-label="Menu"></button>
     <div style="flex:1">
@@ -386,11 +305,9 @@ kbd{background:var(--surface-2);padding:2px 6px;border-radius:6px;font-size:11px
     <button class="icon-btn" id="themeBtn" aria-label="Toggle theme"></button>
     <button class="icon-btn" id="settingsBtn" aria-label="Settings"></button>
   </div>
-
   <main class="view" id="viewRoot"></main>
 </div>
 
-<!-- Print-only area, used to generate PDF via the browser's native print dialog -->
 <div id="printArea"></div>
 
 <!-- Floating actions -->
@@ -407,7 +324,7 @@ kbd{background:var(--surface-2);padding:2px 6px;border-radius:6px;font-size:11px
 
 <div class="toast" id="toast"></div>
 
-<!-- Full-screen error overlay: shown for uncaught errors, storage failures, etc. -->
+<!-- Full-screen error overlay -->
 <div id="errorScreen" style="display:none;position:fixed;inset:0;z-index:9998;background:var(--bg);flex-direction:column;align-items:center;justify-content:center;padding:30px;text-align:center;">
   <div style="width:76px;height:76px;border-radius:22px;background:#fee2e2;display:flex;align-items:center;justify-content:center;margin-bottom:18px;">
     <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
@@ -423,5 +340,6 @@ kbd{background:var(--surface-2);padding:2px 6px;border-radius:6px;font-size:11px
 </div>
 
 <script src="app.js" defer></script>
+<script type="module" src="/src/main.tsx"></script>
 </body>
 </html>
