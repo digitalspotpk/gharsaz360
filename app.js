@@ -814,6 +814,13 @@ function renderNotFound(){
 }
 
 function renderTopbar(){
+  if(ROUTE==='budgetDetail' || ROUTE==='budgetHistory'){
+    const b = ROUTE==='budgetDetail' ? DATA.budgets.find(x=>x.id===CURRENT_BUDGET_ID) : null;
+    $('#pageTitle').textContent = ROUTE==='budgetDetail' ? (b?b.name:'Budget') : 'History';
+    $('#pageSub').textContent = ROUTE==='budgetDetail' ? 'Isolated income, expense & PDF' : 'Previous months & filters';
+    $('#pdfBtn').style.display = 'none';
+    return;
+  }
   const mod = ALL_MODULES.find(m=>m.id===ROUTE) || ALL_MODULES[0];
   $('#pageTitle').textContent = moduleLabel(mod);
   const subs = {
@@ -1551,7 +1558,22 @@ function budgetRow(b){
     <div class="progress ${level}"><div style="width:${pct}%"></div></div>
     <div class="card-sub" style="margin-top:6px">${fmtMoney(spent)} spent of ${fmtMoney(effective)}</div>
     ${carry!==0?`<div class="card-sub" style="margin-top:2px;color:${carry>0?'#059669':'#dc2626'};font-weight:700">${carry>0?'+':'-'}${fmtMoney(Math.abs(carry))} carried from last month (${carry>0?'aap ne bachaya tha':'overspend hua tha'})</div>`:''}
+    ${budgetIsolatedRowExtra(b)}
   </div>`;
+}
+// Additive extra line for each budget row: this month's isolated Income vs
+// Expense profit/loss (auto-calculated) + a shortcut into the fully
+// isolated per-budget view (income/expense/PDF). Kept as a separate
+// function so the original budgetRow markup above stays untouched.
+function budgetIsolatedRowExtra(b){
+  const mKey = monthKey();
+  const inc = budgetIncomeForMonth(b.id, mKey);
+  const exp = budgetExpenseForMonth(b.id, mKey);
+  const bal = inc - exp;
+  return `<div class="card-sub" style="margin-top:6px">Income ${fmtMoney(inc)} this month · ${bal>=0?'Profit':'Loss'} ${fmtMoney(Math.abs(bal))}</div>
+    <div style="margin-top:8px">
+      <button class="btn btn-sm btn-outline" onclick="event.stopPropagation(); openBudgetDetail('${b.id}')">${ICN.wallet} Isolated View, Income &amp; PDF</button>
+    </div>`;
 }
 function openGenericBudget(id){ openBudgetForm(id); }
 function openBudgetForm(editId){
@@ -1584,7 +1606,7 @@ function openBudgetForm(editId){
       });
     });
 }
-function openIncomeForm(editId){
+function openIncomeForm(editId, presetBudgetId){
   const editItem = editId ? DATA.incomes.find(x=>x.id===editId) : null;
   const fields = [
     {key:'source', label:'Source', type:'select', options:['Salary','Business','Rental Income','Freelance','Side Hustle','Other']},
@@ -1592,9 +1614,16 @@ function openIncomeForm(editId){
     {key:'date', label:'Date', type:'date'},
     {key:'notes', label:'Notes', type:'text'},
   ];
+  // Linking an income to a Budget keeps that budget's income/expense/balance
+  // 100% isolated from every other budget (see BUDGET ISOLATION section below).
+  const initialBudgetId = editItem ? (editItem.budgetId||'') : (presetBudgetId||'');
   openSheet(`${sheetHeader((editItem?'Edit ':'Add ')+'Income')}
     <form id="iForm">
       ${fields.map(f=>renderField(f, editItem?editItem[f.key]:(f.key==='date'?todayISO():''))).join('')}
+      <div class="field"><label>Link to Budget (optional)</label>
+        <select name="budgetId"><option value="">— None / General —</option>
+          ${DATA.budgets.map(b=>`<option value="${b.id}" ${initialBudgetId===b.id?'selected':''}>${escapeHtml(b.name)}</option>`).join('')}
+        </select></div>
       <div style="display:flex;gap:10px">
         ${editItem?`<button type="button" class="btn btn-danger" id="delI">${ICN.trash}</button>`:''}
         <button type="submit" class="btn btn-primary btn-block">${editItem?'Update':'Save'}</button>
@@ -1603,6 +1632,7 @@ function openIncomeForm(editId){
       $('#iForm', root).addEventListener('submit', e=>{
         e.preventDefault();
         const vals = readForm(e.target, fields);
+        vals.budgetId = e.target.budgetId.value || null;
         if(editItem) Object.assign(editItem, vals);
         else DATA.incomes.push({id:uid(), ...vals});
         saveData(); closeSheet(); toast('Income saved'); renderRoute();
@@ -1614,11 +1644,16 @@ function openIncomeForm(editId){
 }
 function renderBudgets(){
   const {exp, inc} = computeMonthTotals();
-  let html = `<div class="grid-2">
+  const saved = inc - exp;
+  let html = `<div class="grid-3">
     <div class="stat-card"><div class="stat-label">Total Income (mo)</div><div class="stat-value">${fmtMoney(inc)}</div></div>
     <div class="stat-card danger"><div class="stat-label">Total Expense (mo)</div><div class="stat-value">${fmtMoney(exp)}</div></div>
+    <div class="stat-card ${saved>=0?'blue':'danger'}"><div class="stat-label">${saved>=0?'Saved (mo)':'Shortfall (mo)'}</div><div class="stat-value">${fmtMoney(Math.abs(saved))}</div></div>
   </div>`;
-  html += `<div class="section-title">Budgets</div>`;
+  html += `<div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
+    <span>Budgets</span>
+    <button class="btn btn-sm btn-outline" onclick="openBudgetsReportsMenu()">${ICN.print} Reports</button>
+  </div>`;
   html += DATA.budgets.length ? `<div class="card">${DATA.budgets.map(budgetRow).join('')}</div>` : emptyState('wallet','Koi budget nahi','Naya budget shamil karein');
   html += `<div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
     <span>Income Sources</span>
@@ -1638,12 +1673,442 @@ function renderBudgets(){
 }
 
 /* ---------------------------------------------------------------------- *
+ * 9b. BUDGET ISOLATION — dedicated per-budget view with its own isolated
+ *     Income/Expense ledger, month switcher + carry-forward "bakaya",
+ *     search, a History screen (Month/Year/Budget filters), and dedicated
+ *     PDF export options (per-budget, per-list, monthly, overall).
+ *     Nothing in this block touches the estimated-vs-spent progress logic
+ *     above (budgetSpent/budgetCarryAmount/budgetEffective) — it only adds
+ *     a parallel, purely additive Income vs Expense ledger per budget.
+ * ---------------------------------------------------------------------- */
+let CURRENT_BUDGET_ID = null;
+let budgetDetailMonth = null;
+let budgetDetailSearch = '';
+let HISTORY_FILTER = {budgetId:'', year:'', month:''};
+
+function monthLabel(mKey){
+  if(!mKey) return '';
+  const parts = mKey.split('-').map(Number);
+  const d = new Date(parts[0], parts[1]-1, 1);
+  return d.toLocaleDateString('en-GB',{month:'long', year:'numeric'});
+}
+function shiftMonthKey(mKey, delta){
+  const parts = mKey.split('-').map(Number);
+  const d = new Date(parts[0], parts[1]-1+delta, 1);
+  return d.toISOString().slice(0,7);
+}
+function budgetNameOf(id){
+  if(!id) return 'General';
+  const b = DATA.budgets.find(x=>x.id===id);
+  return b ? b.name : 'Deleted Budget';
+}
+// Isolated ledger helpers — every one of these is scoped to a single
+// budgetId AND a single month, so one budget's records can never mix
+// with another budget's, and one month can never mix with another.
+function budgetIncomeList(budgetId, mKey){
+  return sortByDateDesc(DATA.incomes.filter(i=>i.budgetId===budgetId && monthKey(i.date)===mKey), 'date');
+}
+function budgetExpenseList(budgetId, mKey){
+  return sortByDateDesc(DATA.expenses.filter(e=>e.budgetId===budgetId && monthKey(e.date)===mKey), 'date');
+}
+function budgetIncomeForMonth(budgetId, mKey){
+  return DATA.incomes.filter(i=>i.budgetId===budgetId && monthKey(i.date)===mKey).reduce((s,i)=>s+Number(i.amount||0),0);
+}
+function budgetExpenseForMonth(budgetId, mKey){
+  return DATA.expenses.filter(e=>e.budgetId===budgetId && monthKey(e.date)===mKey).reduce((s,e)=>s+Number(e.amount||0),0);
+}
+function budgetAllMonths(budgetId){
+  const set = new Set();
+  DATA.incomes.forEach(i=>{ if(i.budgetId===budgetId && i.date) set.add(monthKey(i.date)); });
+  DATA.expenses.forEach(e=>{ if(e.budgetId===budgetId && e.date) set.add(monthKey(e.date)); });
+  set.add(monthKey());
+  return Array.from(set).sort();
+}
+// Month-parametrised twins of budgetSpent/budgetCarryAmount/budgetEffective
+// (which above are hard-wired to "this real-world month"). These let the
+// Budget Detail screen show the same estimated-vs-spent + carry-forward
+// figures for whichever month the user is currently browsing.
+function budgetSpentForMonth(b, mKey){
+  if(b.period === 'Monthly') return budgetMonthSpent(b, mKey);
+  return DATA.expenses.filter(e=>e.budgetId===b.id).reduce((s,e)=>s+Number(e.amount||0),0);
+}
+function budgetCarryAmountForMonth(b, mKey){
+  if(b.carryForward !== 'Yes' || b.period !== 'Monthly') return 0;
+  const prevSpent = budgetMonthSpent(b, previousMonthKey(mKey));
+  return Number(b.estimated||0) - prevSpent;
+}
+function budgetEffectiveForMonth(b, mKey){
+  return Number(b.estimated||0) + budgetCarryAmountForMonth(b, mKey);
+}
+
+function openBudgetDetail(id){
+  CURRENT_BUDGET_ID = id;
+  budgetDetailMonth = monthKey();
+  budgetDetailSearch = '';
+  navigate('budgetDetail');
+}
+
+function renderBudgetDetail(){
+  const b = DATA.budgets.find(x=>x.id===CURRENT_BUDGET_ID);
+  if(!b){
+    $('#viewRoot').innerHTML = `<div class="empty" style="padding-top:60px">
+      <div style="font-weight:800;font-size:16px;color:var(--text)">Budget Nahi Mila</div>
+      <div style="font-size:13px;margin:8px 0 20px">Ye budget delete ho chuka hai.</div>
+      <button class="btn btn-primary" onclick="navigate('budgets')">Budgets Par Wapis Jayen</button>
+    </div>`;
+    return;
+  }
+  const mKey = budgetDetailMonth || monthKey();
+  const spent = budgetSpentForMonth(b, mKey);
+  const carry = budgetCarryAmountForMonth(b, mKey);
+  const effective = budgetEffectiveForMonth(b, mKey);
+  const pct = effective>0 ? Math.min(100, Math.round(spent/effective*100)) : 0;
+  const level = pct>90?'red':pct>=70?'amber':'green';
+
+  const incomeTotal = budgetIncomeForMonth(b.id, mKey);
+  const expenseTotal = budgetExpenseForMonth(b.id, mKey);
+  const balance = incomeTotal - expenseTotal;
+
+  let incomes = budgetIncomeList(b.id, mKey);
+  let expenses = budgetExpenseList(b.id, mKey);
+  if(budgetDetailSearch){
+    const q = budgetDetailSearch.toLowerCase();
+    incomes = incomes.filter(i=> (i.source||'').toLowerCase().includes(q) || (i.notes||'').toLowerCase().includes(q));
+    expenses = expenses.filter(e=> (e.category||'').toLowerCase().includes(q) || (e.subcategory||'').toLowerCase().includes(q) || (e.note||'').toLowerCase().includes(q));
+  }
+
+  let html = `<div style="margin-bottom:10px;display:flex;gap:8px;align-items:center">
+    <button class="btn btn-sm btn-outline" onclick="navigate('budgets')">${ICN.back} Budgets</button>
+    <button class="btn btn-sm btn-ghost" onclick="openBudgetHistory('${b.id}')">${ICN.search} History</button>
+  </div>`;
+
+  html += `<div class="card">
+    <div class="card-row" style="justify-content:space-between">
+      <div>
+        <div class="card-title" style="font-size:18px">${escapeHtml(b.name)}</div>
+        <div class="card-sub">${escapeHtml(b.category||'')} · ${escapeHtml(b.period||'')} · 100% Isolated Container</div>
+      </div>
+      <button class="icon-btn" onclick="openBudgetForm('${b.id}')" aria-label="Edit Budget">${ICN.edit}</button>
+    </div>
+  </div>`;
+
+  html += `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+    <button class="icon-btn" id="bdPrev" aria-label="Previous Month">${ICN.back}</button>
+    <div style="text-align:center">
+      <div style="font-weight:800;font-size:15px">${monthLabel(mKey)}</div>
+      <div class="card-sub">Sirf is mahine ka data (dusre mahinon se conflict nahi)</div>
+    </div>
+    <button class="icon-btn" id="bdNext" aria-label="Next Month">${ICN.chevron}</button>
+  </div>`;
+
+  if(carry!==0){
+    html += `<div class="card">
+      <div style="font-weight:700;font-size:13px;color:${carry>0?'#059669':'#dc2626'}">Pichle Maheene ka Bakaya: ${carry>0?'+':'-'}${fmtMoney(Math.abs(carry))}</div>
+      <div class="card-sub" style="margin-top:2px">Ye amount is mahine ke available budget mein ${carry>0?'add':'kam'} ho gaya hai.</div>
+    </div>`;
+  }
+
+  html += `<div class="grid-3">
+    <div class="stat-card"><div class="stat-label">Income</div><div class="stat-value">${fmtMoney(incomeTotal)}</div></div>
+    <div class="stat-card danger"><div class="stat-label">Expense</div><div class="stat-value">${fmtMoney(expenseTotal)}</div></div>
+    <div class="stat-card ${balance>=0?'blue':'danger'}"><div class="stat-label">${balance>=0?'Profit':'Loss'}</div><div class="stat-value">${fmtMoney(Math.abs(balance))}</div></div>
+  </div>`;
+
+  html += `<div class="card">
+    <div class="card-row" style="justify-content:space-between;margin-bottom:8px">
+      <div class="card-sub">Available Budget (estimated${carry!==0?' + bakaya':''})</div>
+      <div class="badge ${level}">${pct}%</div>
+    </div>
+    <div class="progress ${level}"><div style="width:${pct}%"></div></div>
+    <div class="card-sub" style="margin-top:6px">${fmtMoney(spent)} spent of ${fmtMoney(effective)}</div>
+  </div>`;
+
+  html += `<div class="field"><label>Search (is budget ke andar)</label><input type="text" id="bdSearch" placeholder="Source, category ya note se search karein" value="${escapeHtml(budgetDetailSearch)}"></div>`;
+
+  html += `<button class="btn btn-primary btn-block" id="bdExportBtn" style="margin-bottom:16px">${ICN.down} Download PDF (Is Budget Ka)</button>`;
+
+  html += `<div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
+    <span>Incomes (${incomes.length})</span>
+    <button class="btn btn-sm btn-outline" onclick="openIncomeForm(null,'${b.id}')">+ Income</button>
+  </div>`;
+  html += incomes.length ? `<div class="card">${incomes.map(i=>`
+    <div class="list-item" onclick="openIncomeForm('${i.id}','${b.id}')">
+      <div class="avatar" style="background:#d1fae5;color:#065f46">${icon('wallet')}</div>
+      <div class="meta"><div class="t">${escapeHtml(i.source)}</div><div class="s">${fmtDate(i.date)} ${i.notes?'· '+escapeHtml(i.notes):''}</div></div>
+      <div class="amt" style="color:#059669">+${fmtMoney(i.amount)}</div>
+    </div>`).join('')}</div>` : emptyState('wallet','Is mahine koi income nahi','Is budget ke liye income add karein');
+
+  html += `<div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
+    <span>Expenses (${expenses.length})</span>
+    <button class="btn btn-sm btn-outline" onclick="openExpenseForm(null,'${b.id}')">+ Expense</button>
+  </div>`;
+  html += expenses.length ? `<div class="card">${expenses.map(e=>`
+    <div class="list-item" onclick="openExpenseForm('${e.id}','${b.id}')">
+      <div class="avatar" style="background:#fee2e2;color:#991b1b">${icon('wallet')}</div>
+      <div class="meta"><div class="t">${escapeHtml(e.category)}${e.subcategory?' · '+escapeHtml(e.subcategory):''}</div><div class="s">${fmtDate(e.date)} ${e.note?'· '+escapeHtml(e.note):''}</div></div>
+      <div class="amt" style="color:#dc2626">-${fmtMoney(e.amount)}</div>
+    </div>`).join('')}</div>` : emptyState('wallet','Is mahine koi expense nahi','Is budget ke liye expense add karein');
+
+  $('#viewRoot').innerHTML = html;
+
+  $('#bdPrev').addEventListener('click', ()=>{ budgetDetailMonth = shiftMonthKey(mKey,-1); renderBudgetDetail(); });
+  $('#bdNext').addEventListener('click', ()=>{ budgetDetailMonth = shiftMonthKey(mKey,1); renderBudgetDetail(); });
+  $('#bdSearch').addEventListener('input', e=>{ budgetDetailSearch = e.target.value; renderBudgetDetail(); });
+  $('#bdExportBtn').addEventListener('click', ()=>openBudgetExportMenu(b.id, mKey));
+}
+
+/* ---- Per-budget PDF data builders (reuse the existing professional
+ *      buildLedgerPDF engine via pdfSection/openPdfExportSheet below —
+ *      no new/external PDF library, fully offline, same visual design). */
+function budgetPdfSummary(b, mKey){
+  const incomeTotal = budgetIncomeForMonth(b.id, mKey);
+  const expenseTotal = budgetExpenseForMonth(b.id, mKey);
+  const balance = incomeTotal - expenseTotal;
+  return [
+    {label:'Income', value:fmtMoney(incomeTotal), color:'#059669'},
+    {label:'Expense', value:fmtMoney(expenseTotal), color:'#dc2626'},
+    {label: balance>=0?'Balance (Profit)':'Balance (Loss)', value:fmtMoney(Math.abs(balance)), color: balance>=0?'#0d9488':'#dc2626'},
+  ];
+}
+function budgetPdfData(budgetId, mKey, kind){
+  const b = DATA.budgets.find(x=>x.id===budgetId);
+  if(!b) return null;
+  if(kind==='alltime'){
+    const months = budgetAllMonths(b.id);
+    const rows = months.map(mk=>{
+      const inc = budgetIncomeForMonth(b.id, mk), exp = budgetExpenseForMonth(b.id, mk);
+      return [monthLabel(mk), fmtMoney(inc), fmtMoney(exp), fmtMoney(inc-exp)];
+    });
+    const totalInc = months.reduce((s,mk)=>s+budgetIncomeForMonth(b.id,mk),0);
+    const totalExp = months.reduce((s,mk)=>s+budgetExpenseForMonth(b.id,mk),0);
+    return { title:`${b.name} — Overall Budget Report`,
+      summary:[
+        {label:'Total Income', value:fmtMoney(totalInc), color:'#059669'},
+        {label:'Total Expense', value:fmtMoney(totalExp), color:'#dc2626'},
+        {label:(totalInc-totalExp)>=0?'Overall Profit':'Overall Loss', value:fmtMoney(Math.abs(totalInc-totalExp)), color:(totalInc-totalExp)>=0?'#0d9488':'#dc2626'},
+      ],
+      note:`Budget: ${b.name} · ${b.category||''} · ${b.period||''}`,
+      sections:[ pdfSection('Month-wise Summary', ['Month','Income','Expense','Balance'], rows) ]
+    };
+  }
+  const incomes = budgetIncomeList(b.id, mKey);
+  const expenses = budgetExpenseList(b.id, mKey);
+  const sections = [];
+  if(kind!=='expense') sections.push(pdfSection('Incomes', ['Date','Source','Amount','Notes'],
+    incomes.map(i=>[fmtDate(i.date), i.source, fmtMoney(i.amount), i.notes||''])));
+  if(kind!=='income') sections.push(pdfSection('Expenses', ['Date','Category','Sub-category','Amount','Note'],
+    expenses.map(e=>[fmtDate(e.date), e.category, e.subcategory||'', fmtMoney(e.amount), e.note||''])));
+  const titleSuffix = kind==='income' ? 'Incomes' : kind==='expense' ? 'Expenses' : 'Budget Report';
+  return {
+    title:`${b.name} — ${titleSuffix} (${monthLabel(mKey)})`,
+    summary: budgetPdfSummary(b, mKey),
+    note:`Budget: ${b.name} · ${b.category||''} · ${b.period||''} · Sirf is budget aur is mahine ka data (100% isolated, kisi aur budget se mix nahi).`,
+    sections
+  };
+}
+function openBudgetExportMenu(budgetId, mKey){
+  const b = DATA.budgets.find(x=>x.id===budgetId);
+  openSheet(`${sheetHeader('Export PDF'+(b?' — '+b.name:''))}
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button class="btn btn-outline btn-block" id="expFull">${ICN.print} Is Budget Ka Full Report (${monthLabel(mKey)})</button>
+      <button class="btn btn-outline btn-block" id="expInc">${ICN.print} Sirf Incomes (${monthLabel(mKey)})</button>
+      <button class="btn btn-outline btn-block" id="expExp">${ICN.print} Sirf Expenses (${monthLabel(mKey)})</button>
+      <button class="btn btn-ghost btn-block" id="expAll">${ICN.print} Overall (Sab Mahine, Is Budget Ka)</button>
+    </div>`, (root)=>{
+      $('#expFull', root).addEventListener('click', ()=>{ closeSheet(); openPdfExportSheet(budgetPdfData(budgetId, mKey, 'full')); });
+      $('#expInc', root).addEventListener('click', ()=>{ closeSheet(); openPdfExportSheet(budgetPdfData(budgetId, mKey, 'income')); });
+      $('#expExp', root).addEventListener('click', ()=>{ closeSheet(); openPdfExportSheet(budgetPdfData(budgetId, mKey, 'expense')); });
+      $('#expAll', root).addEventListener('click', ()=>{ closeSheet(); openPdfExportSheet(budgetPdfData(budgetId, mKey, 'alltime')); });
+    });
+}
+
+/* ---- Global (all-budgets) monthly / overall report builders ---- */
+function monthlyAllBudgetsPdfData(mKey){
+  mKey = mKey || monthKey();
+  const rows = DATA.budgets.map(b=>{
+    const inc = budgetIncomeForMonth(b.id, mKey), exp = budgetExpenseForMonth(b.id, mKey);
+    return [b.name, fmtMoney(inc), fmtMoney(exp), fmtMoney(inc-exp)];
+  });
+  const genInc = DATA.incomes.filter(i=>!i.budgetId && monthKey(i.date)===mKey).reduce((s,i)=>s+Number(i.amount||0),0);
+  const genExp = DATA.expenses.filter(e=>!e.budgetId && monthKey(e.date)===mKey).reduce((s,e)=>s+Number(e.amount||0),0);
+  if(genInc || genExp) rows.push(['General (No Budget)', fmtMoney(genInc), fmtMoney(genExp), fmtMoney(genInc-genExp)]);
+  const totalInc = DATA.incomes.filter(i=>monthKey(i.date)===mKey).reduce((s,i)=>s+Number(i.amount||0),0);
+  const totalExp = DATA.expenses.filter(e=>monthKey(e.date)===mKey).reduce((s,e)=>s+Number(e.amount||0),0);
+  return { title:`Monthly Report — ${monthLabel(mKey)}`,
+    summary:[
+      {label:'Total Income', value:fmtMoney(totalInc), color:'#059669'},
+      {label:'Total Expense', value:fmtMoney(totalExp), color:'#dc2626'},
+      {label:(totalInc-totalExp)>=0?'Net Savings':'Net Loss', value:fmtMoney(Math.abs(totalInc-totalExp)), color:(totalInc-totalExp)>=0?'#059669':'#dc2626'},
+    ],
+    note:`Sirf ${monthLabel(mKey)} ka data — pichle/agle mahinon se conflict nahi.`,
+    sections:[ pdfSection('Budget-wise Breakdown (Is Mahine)', ['Budget','Income','Expense','Balance'], rows) ]
+  };
+}
+function overallBudgetsPdfData(){
+  const rows = DATA.budgets.map(b=>{
+    const months = budgetAllMonths(b.id);
+    const inc = months.reduce((s,mk)=>s+budgetIncomeForMonth(b.id,mk),0);
+    const exp = months.reduce((s,mk)=>s+budgetExpenseForMonth(b.id,mk),0);
+    return [b.name, b.category||'', b.period||'', fmtMoney(inc), fmtMoney(exp), fmtMoney(inc-exp)];
+  });
+  const totalInc = DATA.incomes.reduce((s,i)=>s+Number(i.amount||0),0);
+  const totalExp = DATA.expenses.reduce((s,e)=>s+Number(e.amount||0),0);
+  const allMonths = Array.from(new Set([...DATA.incomes.filter(i=>i.date).map(i=>monthKey(i.date)), ...DATA.expenses.filter(e=>e.date).map(e=>monthKey(e.date))])).sort();
+  const monthRows = allMonths.map(mk=>{
+    const inc = DATA.incomes.filter(i=>monthKey(i.date)===mk).reduce((s,i)=>s+Number(i.amount||0),0);
+    const exp = DATA.expenses.filter(e=>monthKey(e.date)===mk).reduce((s,e)=>s+Number(e.amount||0),0);
+    return [monthLabel(mk), fmtMoney(inc), fmtMoney(exp), fmtMoney(inc-exp)];
+  });
+  return { title:'Overall Budgets Report (All Budgets, All Time)',
+    summary:[
+      {label:'Total Budgets', value:String(DATA.budgets.length), color:'#0d9488'},
+      {label:'Total Income', value:fmtMoney(totalInc), color:'#059669'},
+      {label:'Total Expense', value:fmtMoney(totalExp), color:'#dc2626'},
+    ],
+    sections:[
+      pdfSection('Budgets Summary (All-Time)', ['Budget','Category','Period','Income','Expense','Balance'], rows),
+      pdfSection('Month-wise Overall Summary', ['Month','Income','Expense','Balance'], monthRows),
+    ]
+  };
+}
+function overallIncomeExpensePdfData(){
+  const allMonths = Array.from(new Set([...DATA.incomes.filter(i=>i.date).map(i=>monthKey(i.date)), ...DATA.expenses.filter(e=>e.date).map(e=>monthKey(e.date))])).sort();
+  const monthRows = allMonths.map(mk=>{
+    const inc = DATA.incomes.filter(i=>monthKey(i.date)===mk).reduce((s,i)=>s+Number(i.amount||0),0);
+    const exp = DATA.expenses.filter(e=>monthKey(e.date)===mk).reduce((s,e)=>s+Number(e.amount||0),0);
+    return [monthLabel(mk), fmtMoney(inc), fmtMoney(exp), fmtMoney(inc-exp)];
+  });
+  const totalInc = DATA.incomes.reduce((s,i)=>s+Number(i.amount||0),0);
+  const totalExp = DATA.expenses.reduce((s,e)=>s+Number(e.amount||0),0);
+  return { title:'Overall Income & Expense Report',
+    summary:[
+      {label:'Total Income', value:fmtMoney(totalInc), color:'#059669'},
+      {label:'Total Expense', value:fmtMoney(totalExp), color:'#dc2626'},
+      {label:(totalInc-totalExp)>=0?'Net Savings':'Net Loss', value:fmtMoney(Math.abs(totalInc-totalExp)), color:(totalInc-totalExp)>=0?'#059669':'#dc2626'},
+    ],
+    sections:[
+      pdfSection('Month-wise Summary', ['Month','Income','Expense','Balance'], monthRows),
+      pdfSection('All Incomes', ['Date','Budget','Source','Amount','Notes'],
+        sortByDateDesc(DATA.incomes,'date').map(i=>[fmtDate(i.date), budgetNameOf(i.budgetId), i.source, fmtMoney(i.amount), i.notes||''])),
+      pdfSection('All Expenses', ['Date','Budget','Category','Sub-category','Amount'],
+        sortByDateDesc(DATA.expenses,'date').map(e=>[fmtDate(e.date), budgetNameOf(e.budgetId), e.category, e.subcategory||'', fmtMoney(e.amount)])),
+    ]
+  };
+}
+function openBudgetsReportsMenu(){
+  openSheet(`${sheetHeader('Reports & History')}
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button class="btn btn-outline btn-block" id="repMonthly">${ICN.print} Generate Monthly PDF (${monthLabel(monthKey())})</button>
+      <button class="btn btn-outline btn-block" id="repOverall">${ICN.print} Download Overall PDF (Budgets)</button>
+      <button class="btn btn-outline btn-block" id="repOverallIE">${ICN.print} Download Overall Income/Expense PDF</button>
+      <button class="btn btn-ghost btn-block" id="repHistory">${ICN.search} History / Previous Months</button>
+    </div>`, (root)=>{
+      $('#repMonthly', root).addEventListener('click', ()=>{ closeSheet(); openPdfExportSheet(monthlyAllBudgetsPdfData(monthKey())); });
+      $('#repOverall', root).addEventListener('click', ()=>{ closeSheet(); openPdfExportSheet(overallBudgetsPdfData()); });
+      $('#repOverallIE', root).addEventListener('click', ()=>{ closeSheet(); openPdfExportSheet(overallIncomeExpensePdfData()); });
+      $('#repHistory', root).addEventListener('click', ()=>{ closeSheet(); openBudgetHistory(); });
+    });
+}
+
+/* ---- History / Previous Months screen — filter by Month, Year, Budget ---- */
+function historyAllMonths(){
+  const set = new Set();
+  DATA.incomes.forEach(i=>{ if(i.date) set.add(monthKey(i.date)); });
+  DATA.expenses.forEach(e=>{ if(e.date) set.add(monthKey(e.date)); });
+  return Array.from(set).sort().reverse();
+}
+function openBudgetHistory(budgetId){
+  HISTORY_FILTER = {budgetId: budgetId||'', year:'', month:''};
+  navigate('budgetHistory');
+}
+function renderBudgetHistory(){
+  const months = historyAllMonths();
+  const years = Array.from(new Set(months.map(m=>m.slice(0,4)))).sort().reverse();
+  let filteredMonths = months;
+  if(HISTORY_FILTER.year) filteredMonths = filteredMonths.filter(m=>m.startsWith(HISTORY_FILTER.year));
+  if(HISTORY_FILTER.month) filteredMonths = filteredMonths.filter(m=>m===HISTORY_FILTER.month);
+
+  let incomes = DATA.incomes.filter(i=>i.date && filteredMonths.includes(monthKey(i.date)));
+  let expenses = DATA.expenses.filter(e=>e.date && filteredMonths.includes(monthKey(e.date)));
+  if(HISTORY_FILTER.budgetId){
+    incomes = incomes.filter(i=>i.budgetId===HISTORY_FILTER.budgetId);
+    expenses = expenses.filter(e=>e.budgetId===HISTORY_FILTER.budgetId);
+  }
+  const totalInc = incomes.reduce((s,i)=>s+Number(i.amount||0),0);
+  const totalExp = expenses.reduce((s,e)=>s+Number(e.amount||0),0);
+
+  let html = `<div style="margin-bottom:10px"><button class="btn btn-sm btn-outline" onclick="navigate('budgets')">${ICN.back} Budgets</button></div>`;
+  html += `<div class="section-title">History / Previous Months</div>`;
+  html += `<div class="card">
+    <div class="field"><label>Budget</label>
+      <select id="histBudgetSel"><option value="">— All Budgets —</option>
+        ${DATA.budgets.map(b=>`<option value="${b.id}" ${HISTORY_FILTER.budgetId===b.id?'selected':''}>${escapeHtml(b.name)}</option>`).join('')}
+      </select></div>
+    <div class="field-row">
+      <div class="field"><label>Year</label>
+        <select id="histYearSel"><option value="">Sab</option>
+          ${years.map(y=>`<option value="${y}" ${HISTORY_FILTER.year===y?'selected':''}>${y}</option>`).join('')}
+        </select></div>
+      <div class="field"><label>Month</label>
+        <select id="histMonthSel"><option value="">Sab</option>
+          ${months.map(m=>`<option value="${m}" ${HISTORY_FILTER.month===m?'selected':''}>${monthLabel(m)}</option>`).join('')}
+        </select></div>
+    </div>
+  </div>`;
+
+  html += `<div class="grid-2">
+    <div class="stat-card"><div class="stat-label">Total Income</div><div class="stat-value">${fmtMoney(totalInc)}</div></div>
+    <div class="stat-card danger"><div class="stat-label">Total Expense</div><div class="stat-value">${fmtMoney(totalExp)}</div></div>
+  </div>`;
+
+  html += `<button class="btn btn-primary btn-block" id="histPdfBtn" style="margin-bottom:16px">${ICN.down} Download PDF (Is Filter Ka)</button>`;
+
+  html += `<div class="section-title">Incomes (${incomes.length})</div>`;
+  html += incomes.length ? `<div class="card">${sortByDateDesc(incomes,'date').map(i=>`
+    <div class="list-item" onclick="openIncomeForm('${i.id}')">
+      <div class="avatar" style="background:#d1fae5;color:#065f46">${icon('wallet')}</div>
+      <div class="meta"><div class="t">${escapeHtml(i.source)} · ${escapeHtml(budgetNameOf(i.budgetId))}</div><div class="s">${fmtDate(i.date)}</div></div>
+      <div class="amt" style="color:#059669">+${fmtMoney(i.amount)}</div>
+    </div>`).join('')}</div>` : emptyState('wallet','Koi income nahi mila','Is filter ke liye koi record nahi');
+
+  html += `<div class="section-title">Expenses (${expenses.length})</div>`;
+  html += expenses.length ? `<div class="card">${sortByDateDesc(expenses,'date').map(e=>`
+    <div class="list-item" onclick="openExpenseForm('${e.id}')">
+      <div class="avatar" style="background:#fee2e2;color:#991b1b">${icon('wallet')}</div>
+      <div class="meta"><div class="t">${escapeHtml(e.category)} · ${escapeHtml(budgetNameOf(e.budgetId))}</div><div class="s">${fmtDate(e.date)}</div></div>
+      <div class="amt" style="color:#dc2626">-${fmtMoney(e.amount)}</div>
+    </div>`).join('')}</div>` : emptyState('wallet','Koi expense nahi mila','Is filter ke liye koi record nahi');
+
+  $('#viewRoot').innerHTML = html;
+  $('#histBudgetSel').addEventListener('change', e=>{ HISTORY_FILTER.budgetId = e.target.value; renderBudgetHistory(); });
+  $('#histYearSel').addEventListener('change', e=>{ HISTORY_FILTER.year = e.target.value; renderBudgetHistory(); });
+  $('#histMonthSel').addEventListener('change', e=>{ HISTORY_FILTER.month = e.target.value; renderBudgetHistory(); });
+  $('#histPdfBtn').addEventListener('click', ()=>{
+    const label = HISTORY_FILTER.budgetId ? budgetNameOf(HISTORY_FILTER.budgetId) : 'All Budgets';
+    const monthLbl = HISTORY_FILTER.month ? monthLabel(HISTORY_FILTER.month) : (HISTORY_FILTER.year || 'All Time');
+    openPdfExportSheet({
+      title:`History — ${label} (${monthLbl})`,
+      summary:[
+        {label:'Total Income', value:fmtMoney(totalInc), color:'#059669'},
+        {label:'Total Expense', value:fmtMoney(totalExp), color:'#dc2626'},
+        {label:(totalInc-totalExp)>=0?'Net Savings':'Net Loss', value:fmtMoney(Math.abs(totalInc-totalExp)), color:(totalInc-totalExp)>=0?'#059669':'#dc2626'},
+      ],
+      sections:[
+        pdfSection('Incomes', ['Date','Budget','Source','Amount','Notes'], sortByDateDesc(incomes,'date').map(i=>[fmtDate(i.date), budgetNameOf(i.budgetId), i.source, fmtMoney(i.amount), i.notes||''])),
+        pdfSection('Expenses', ['Date','Budget','Category','Sub-category','Amount'], sortByDateDesc(expenses,'date').map(e=>[fmtDate(e.date), budgetNameOf(e.budgetId), e.category, e.subcategory||'', fmtMoney(e.amount)])),
+      ]
+    });
+  });
+}
+
+/* ---------------------------------------------------------------------- *
  * 10. EXPENSE TRACKER  (nested categories + aggregation)
  * ---------------------------------------------------------------------- */
 let expenseFilter = 'All';
-function openExpenseForm(editId){
+function openExpenseForm(editId, presetBudgetId){
   const editItem = editId ? DATA.expenses.find(x=>x.id===editId) : null;
   const mainCats = Object.keys(CATEGORY_TREE);
+  const initialBudgetId = editItem ? (editItem.budgetId||'') : (presetBudgetId||'');
   openSheet(`${sheetHeader((editItem?'Edit ':'Add ')+'Expense')}
     <form id="eForm">
       <div class="field"><label>Main Category *</label>
@@ -1658,7 +2123,7 @@ function openExpenseForm(editId){
       </div>
       <div class="field"><label>Link to Budget (optional)</label>
         <select name="budgetId"><option value="">— None —</option>
-          ${DATA.budgets.map(b=>`<option value="${b.id}" ${editItem&&editItem.budgetId===b.id?'selected':''}>${escapeHtml(b.name)}</option>`).join('')}
+          ${DATA.budgets.map(b=>`<option value="${b.id}" ${initialBudgetId===b.id?'selected':''}>${escapeHtml(b.name)}</option>`).join('')}
         </select></div>
       <div class="field"><label>Note</label><input type="text" name="note" value="${editItem?escapeHtml(editItem.note||''):''}" placeholder="optional"></div>
       <div style="display:flex;gap:10px">
@@ -3753,6 +4218,8 @@ const ROUTE_RENDERERS = {
   goals: renderGoals,
   settings: renderSettings,
   more: ()=>{ $('#viewRoot').innerHTML = moreGrid(); },
+  budgetDetail: renderBudgetDetail,
+  budgetHistory: renderBudgetHistory,
 };
 function renderRoute(){
   const knownRoutes = Object.keys(ROUTE_RENDERERS);
@@ -4281,9 +4748,14 @@ function printDataToText(data){
   });
   return out;
 }
-function exportPDF(){
-  const data = getPrintData(ROUTE);
-  if(!data){ toast('Is tab ke liye export available nahi'); return; }
+// Reusable export sheet (Download PDF / Print / Copy) for any report data
+// object shaped like {title, summary?, note?, sections}. Originally this
+// logic lived only inline inside exportPDF() (topbar button, current ROUTE
+// only) — it is now extracted verbatim so the new per-budget, monthly,
+// overall and history PDF buttons can reuse the exact same professional
+// PDF engine/design instead of duplicating this logic.
+function openPdfExportSheet(data){
+  if(!data){ toast('Export ke liye data mojood nahi'); return; }
   const pdfBtn = `<button class="btn btn-primary btn-block" id="doPdfBtn">${ICN.down} Download PDF File</button>`;
   const printBtn = `<button class="btn btn-outline btn-block" id="doPrintBtn">${ICN.print} Print / Save as PDF (browser)</button>`;
   const copyBtn = `<button class="btn btn-ghost btn-block" id="doCopyBtn">Copy Data (Clipboard)</button>`;
@@ -4322,4 +4794,9 @@ function exportPDF(){
         else showCopyFallback(data.title, text);
       });
     });
+}
+function exportPDF(){
+  const data = getPrintData(ROUTE);
+  if(!data){ toast('Is tab ke liye export available nahi'); return; }
+  openPdfExportSheet(data);
 }
